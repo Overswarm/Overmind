@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { listLibrary, getCachedReplay, touchLibraryEntry } from '../storage/db';
 import { useAppStore } from '../state/store';
-import { formatMMSS, frameToSeconds } from '../types/replay';
+import { cleanBwString, formatMMSS, frameToSeconds } from '../types/replay';
 
 export function Library() {
   const entries = useLiveQuery(() => listLibrary(), [], []);
@@ -40,11 +40,13 @@ export function Library() {
               }`}
               onClick={() => onOpen(e.hash, e.name, e.path)}
             >
-              <div className="truncate font-medium text-[var(--color-text-h)]">{e.mapName || e.name}</div>
+              <div className="truncate font-medium text-[var(--color-text-h)]">
+                {cleanBwString(e.mapName) || e.name}
+              </div>
               <div className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-muted)]">
                 <span className="rounded bg-[var(--color-bg-elev)] px-1.5 py-0.5 font-mono">{e.matchup || '??'}</span>
                 <span>{dur}</span>
-                <span className="truncate">{(e.players || []).join(' vs ')}</span>
+                <span className="truncate">{(e.players || []).map((p) => cleanBwString(p)).join(' vs ')}</span>
               </div>
             </button>
           </li>

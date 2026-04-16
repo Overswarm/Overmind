@@ -3,7 +3,7 @@
 // layer (drag-drop, file picker, folder picker).
 
 import { parseReplay } from '../parser/client';
-import type { ParsedReplay } from '../types/replay';
+import { raceLetter, type ParsedReplay } from '../types/replay';
 import {
   getCachedReplay,
   putCachedReplay,
@@ -74,7 +74,7 @@ function deriveMatchup(replay: ParsedReplay): string | undefined {
   let prevTeam = active[0].Team;
   for (const [i, p] of active.entries()) {
     if (i > 0 && p.Team !== prevTeam) parts.push('v');
-    parts.push(p.Race?.Letter ?? '?');
+    parts.push(raceLetter(p.Race));
     prevTeam = p.Team;
   }
   return parts.join('');

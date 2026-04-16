@@ -120,7 +120,31 @@ export interface NamedConst {
 }
 
 export interface RaceConst extends NamedConst {
-  Letter?: string;
+  // screp serializes Race.Letter as the raw byte value (e.g. 90 for 'Z'),
+  // not a string. Use raceLetter() to get the character.
+  Letter?: number;
+}
+
+// Convert screp's numeric Race.Letter byte into its character ('Z', 'T', 'P').
+export function raceLetter(race: RaceConst | undefined | null): string {
+  const l = race?.Letter;
+  if (typeof l === 'number' && l >= 32 && l < 127) return String.fromCharCode(l);
+  return race?.ShortName?.[0]?.toUpperCase() ?? '?';
+}
+
+// BW map/title/player-name strings commonly contain color control codes in
+// the 0x01–0x1F range (e.g. 0x07 = white). Strip those so text renders
+// cleanly. Keep tab/newline/space. Also collapse runs of whitespace.
+export function cleanBwString(s: string | undefined | null): string {
+  if (!s) return '';
+  let out = '';
+  for (const ch of s) {
+    const c = ch.charCodeAt(0);
+    if (c < 0x20 && c !== 0x09 && c !== 0x0a) continue;
+    if (c === 0x7f) continue;
+    out += ch;
+  }
+  return out.replace(/\s+/g, ' ').trim();
 }
 
 // Utility: frames→seconds. screp's native rate is 23.81 FPS (BW fastest).

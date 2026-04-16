@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start": "vite --open",
     "build": "tsc -b && vite build",
     "build:wasm": "bash wasm/build.sh",
     "lint": "eslint .",

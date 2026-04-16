@@ -37,17 +37,25 @@ src/analysis/   (Phase 1+) derived metrics
 - Node.js 22+
 - Go 1.22+ (only needed to rebuild the WASM parser)
 
-## Develop
+## Run
 
+Double-click `run.bat` (Windows) or `./run.sh` (macOS/Linux). The launcher
+installs dependencies on first run, starts the dev server, and opens the app
+in your default browser.
+
+From the terminal directly:
 ```
-npm install
-npm run build:wasm     # rebuild parser (only needed when wasm/main.go changes)
-npm run dev
+npm install   # first time only
+npm start     # or: npm run dev
 ```
 
-Open http://localhost:5173 and drop `.rep` files or a folder onto the main
-panel. Parsed replays are cached by SHA-256 of their bytes, so re-opening is
-instant.
+Drop `.rep` files or a folder onto the main panel. Parsed replays are cached
+by SHA-256 of their bytes, so re-opening is instant.
+
+To rebuild the WASM parser (only needed when `wasm/main.go` changes):
+```
+npm run build:wasm
+```
 
 ## Build
 

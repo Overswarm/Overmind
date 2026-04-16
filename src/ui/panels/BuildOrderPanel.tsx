@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../state/store';
 import { cleanBwString, formatMMSS } from '../../types/replay';
 import {
@@ -34,20 +34,34 @@ export function BuildOrderPanel() {
   const currentFrame = useAppStore((s) => s.currentFrame);
   const setFrame = useAppStore((s) => s.setFrame);
   const listRef = useRef<HTMLDivElement>(null);
+  // null = show all players; a number selects a single PID.
+  const [filterPID, setFilterPID] = useState<number | null>(null);
+
+  const players = useMemo(() => {
+    if (!active) return [] as { id: number; name: string }[];
+    return (active.replay.Header?.Players ?? [])
+      .filter((p) => !p.Observer)
+      .map((p) => ({ id: p.ID, name: cleanBwString(p.Name) }));
+  }, [active]);
+
+  // Reset filter when the active replay changes so we don't carry a stale PID.
+  useEffect(() => {
+    setFilterPID(null);
+  }, [active?.hash]);
 
   const { events, playerNames, activeIndex } = useMemo(() => {
     if (!active) return { events: [] as BuildOrderEvent[], playerNames: {} as Record<number, string>, activeIndex: -1 };
-    const ev = computeBuildOrder(active.replay);
+    const all = computeBuildOrder(active.replay);
+    const ev = filterPID == null ? all : all.filter((e) => e.playerID === filterPID);
     const names: Record<number, string> = {};
     for (const p of active.replay.Header?.Players ?? []) names[p.ID] = cleanBwString(p.Name);
-    // Find the last event at or before currentFrame.
     let idx = -1;
     for (let i = 0; i < ev.length; i++) {
       if (ev[i].frame <= currentFrame) idx = i;
       else break;
     }
     return { events: ev, playerNames: names, activeIndex: idx };
-  }, [active, currentFrame]);
+  }, [active, currentFrame, filterPID]);
 
   useEffect(() => {
     if (activeIndex < 0 || !listRef.current) return;
@@ -81,12 +95,44 @@ export function BuildOrderPanel() {
 
   return (
     <div className="flex h-full flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2">
-        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-          Build order
-          <span className="ml-2 text-[10px] font-normal normal-case text-[var(--color-muted)]">
-            {events.length} events
-          </span>
+      <div className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+            Build order
+            <span className="ml-2 text-[10px] font-normal normal-case text-[var(--color-muted)]">
+              {events.length} events
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setFilterPID(null)}
+              className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                filterPID == null
+                  ? 'bg-[var(--color-accent)] text-white'
+                  : 'border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
+              }`}
+            >
+              Both
+            </button>
+            {players.map((p, i) => (
+              <button
+                key={p.id}
+                onClick={() => setFilterPID(p.id)}
+                className={`flex items-center gap-1 rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                  filterPID === p.id
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
+                }`}
+                title={p.name}
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ background: i === 0 ? 'var(--color-player-a)' : 'var(--color-player-b)' }}
+                />
+                <span className="max-w-[10ch] truncate normal-case">{p.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex gap-1">
           {(['txt', 'csv', 'json'] as const).map((k) => (

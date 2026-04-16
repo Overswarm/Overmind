@@ -1,6 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useAppStore } from '../state/store';
 import { FRAMES_PER_SECOND, formatMMSS, frameToSeconds } from '../types/replay';
+import { computeBuildOrder } from '../analysis/buildOrder';
+import { computeSwingMarkers, type SwingMarker } from '../analysis/swings';
+
+const KIND_COLOR: Record<SwingMarker['kind'], string> = {
+  expansion: 'var(--color-accent)',
+  tech: '#a78bfa',
+  unit: '#f59e0b',
+};
 
 export function Timeline() {
   const active = useAppStore((s) => s.active);
@@ -82,6 +90,30 @@ export function Timeline() {
       <div className="font-mono text-xs text-[var(--color-muted)] tabular-nums">
         {elapsed} / {totalStr}
       </div>
+      <SwingTrack total={total} />
+    </div>
+  );
+}
+
+// Scrubber + overlayed swing markers. The range input and the absolute marker
+// layer share the same width via a flex container, so marker positions line up
+// with input values.
+function SwingTrack({ total }: { total: number }) {
+  const active = useAppStore((s) => s.active);
+  const currentFrame = useAppStore((s) => s.currentFrame);
+  const setFrame = useAppStore((s) => s.setFrame);
+
+  const markers = useMemo(() => {
+    if (!active) return [];
+    const ev = computeBuildOrder(active.replay);
+    return computeSwingMarkers(ev);
+  }, [active]);
+
+  const players = (active?.replay.Header?.Players ?? []).filter((p) => !p.Observer);
+  const pidIndex = new Map(players.map((p, i) => [p.ID, i]));
+
+  return (
+    <div className="relative flex-1">
       <input
         type="range"
         min={0}
@@ -89,8 +121,38 @@ export function Timeline() {
         step={1}
         value={Math.min(currentFrame, total)}
         onChange={(e) => setFrame(Number(e.target.value))}
-        className="flex-1 accent-[var(--color-accent)]"
+        className="relative z-10 h-4 w-full accent-[var(--color-accent)]"
       />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-full">
+        {markers.map((m, i) => {
+          const pct = total > 0 ? (m.frame / total) * 100 : 0;
+          const idx = pidIndex.get(m.playerID) ?? 0;
+          const side = idx === 0 ? 'top' : 'bottom';
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setFrame(m.frame)}
+              title={`${formatMMSS(m.seconds)} · ${m.label}`}
+              className="pointer-events-auto absolute h-2 w-[2px] -translate-x-1/2"
+              style={{
+                left: `${pct}%`,
+                [side]: '0',
+                background: KIND_COLOR[m.kind],
+                opacity: 0.85,
+              }}
+            />
+          );
+        })}
+      </div>
+      <div className="mt-1 flex justify-between text-[9px] uppercase tracking-wide text-[var(--color-muted)]">
+        <span>
+          <span className="mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.expansion }} /> expand
+          <span className="ml-3 mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.tech }} /> tech
+          <span className="ml-3 mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.unit }} /> 1st unit
+        </span>
+        <span>top = P1 · bottom = P2</span>
+      </div>
     </div>
   );
 }

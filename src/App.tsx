@@ -5,6 +5,7 @@ import { Library } from './ui/Library';
 import { DropZone } from './ui/DropZone';
 import { DualTrackPanel } from './ui/panels/DualTrackPanel';
 import { BuildOrderPanel } from './ui/panels/BuildOrderPanel';
+import { RosterPanel } from './ui/panels/RosterPanel';
 import { ApmPanel } from './ui/panels/ApmPanel';
 import { ChatPanel } from './ui/panels/ChatPanel';
 import { DebugPanel } from './ui/panels/DebugPanel';
@@ -66,10 +67,13 @@ function App() {
               <div className="col-span-5 row-span-3">
                 <BuildOrderPanel />
               </div>
-              <div className="col-span-4 row-span-3">
+              <div className="col-span-3 row-span-3">
+                <RosterPanel />
+              </div>
+              <div className="col-span-2 row-span-3">
                 <ApmPanel />
               </div>
-              <div className="col-span-3 row-span-3">
+              <div className="col-span-2 row-span-3">
                 <ChatPanel />
               </div>
             </div>

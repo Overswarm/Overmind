@@ -1,8 +1,16 @@
+import { useMemo } from 'react';
 import { useAppStore } from '../state/store';
 import { cleanBwString, formatMMSS, frameToSeconds, raceLetter } from '../types/replay';
+import { computeBuildOrder } from '../analysis/buildOrder';
+import { classifyOpenings } from '../analysis/openings';
 
 export function MetadataHeader() {
   const active = useAppStore((s) => s.active);
+  const openings = useMemo(() => {
+    if (!active) return [];
+    const ev = computeBuildOrder(active.replay);
+    return classifyOpenings(active.replay, ev);
+  }, [active]);
   if (!active) {
     return (
       <div className="flex h-14 items-center px-4 text-[var(--color-text-h)]">
@@ -35,12 +43,24 @@ export function MetadataHeader() {
 
   return (
     <div className="flex h-14 items-center gap-4 px-4">
-      <div>
-        <div className="text-base font-semibold text-[var(--color-text-h)]">{mapTitle}</div>
-        <div className="text-xs text-[var(--color-muted)]">
+      <div className="min-w-0">
+        <div className="truncate text-base font-semibold text-[var(--color-text-h)]">{mapTitle}</div>
+        <div className="truncate text-xs text-[var(--color-muted)]">
           {matchup} · {duration}
           {h.StartTime ? ` · ${new Date(h.StartTime).toLocaleString()}` : ''}
           {winners}
+          {openings.length > 0 && (
+            <span className="ml-2">
+              · Opening:{' '}
+              {openings.map((o, i) => (
+                <span key={o.playerID} className={o.confidence === 'inferred' ? 'italic' : ''}>
+                  {i > 0 ? ', ' : ''}
+                  <span className="text-[var(--color-text-h)]">{o.label}</span>
+                  <span className="ml-1 font-mono text-[10px] uppercase">{o.race}</span>
+                </span>
+              ))}
+            </span>
+          )}
           {leaves.map((l, i) => (
             <span key={i} className="ml-2 text-[var(--color-muted)]">
               · {l.name} left {formatMMSS(l.seconds)}

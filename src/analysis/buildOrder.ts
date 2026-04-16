@@ -10,7 +10,7 @@
 //   - Worker count is total produced, not alive. Same caveat.
 
 import type { ParsedReplay, ReplayCommand } from '../types/replay';
-import { cmdTechName, cmdUnit, cmdUpgradeName, isType, TYPE_NAMES } from './commands';
+import { cmdTechName, cmdUnit, cmdUpgradeName, isEffective, isType, TYPE_NAMES } from './commands';
 import { unitMeta } from './units';
 
 export interface BuildOrderEvent {
@@ -36,6 +36,11 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
   for (const c of cmds) {
     const tn = c.Type?.Name;
     if (!tn) continue;
+
+    // Skip commands screp has flagged as ineffective (spam, repeats, queue
+    // already full, etc.). Without this, mashing 'p' at game start produces
+    // phantom probes that were never actually trained.
+    if (!isEffective(c)) continue;
 
     const pid = c.PlayerID;
     const frame = c.Frame;

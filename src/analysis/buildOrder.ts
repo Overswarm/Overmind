@@ -33,6 +33,29 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
 
   const fps = 1000 / 42;
 
+  // Debug: one-shot histogram of IneffKind values so we can verify the filter
+  // matches screp's output shape. Logs once per replay (not per command).
+  if (typeof console !== 'undefined' && !(replay as unknown as { __overmindDumpedIneff?: boolean }).__overmindDumpedIneff) {
+    const hist: Record<string, number> = {};
+    for (const c of cmds) {
+      const k = (c as { IneffKind?: unknown }).IneffKind;
+      const key = k === undefined ? '(undefined)' : typeof k === 'object' ? JSON.stringify(k) : String(k);
+      hist[key] = (hist[key] ?? 0) + 1;
+    }
+    // eslint-disable-next-line no-console
+    console.debug('[overmind] IneffKind histogram:', hist);
+    (replay as unknown as { __overmindDumpedIneff?: boolean }).__overmindDumpedIneff = true;
+  }
+
+  // Early-game dedupe: in the first ~1 second nobody has the resources to
+  // queue multiples of anything (you start with exactly one unit's worth of
+  // minerals), so repeated Train commands for the same player/unit inside
+  // that window are always mashing. Screp's IneffKind heuristic sometimes
+  // misses these because there's no prior "effective" command to compare
+  // against. Keyed by `${pid}::${unitId}`.
+  const EARLY_GAME_FRAMES = 48; // ~2s at 23.81 fps.
+  const earlySeen = new Set<string>();
+
   for (const c of cmds) {
     const tn = c.Type?.Name;
     if (!tn) continue;
@@ -41,6 +64,15 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
     // already full, etc.). Without this, mashing 'p' at game start produces
     // phantom probes that were never actually trained.
     if (!isEffective(c)) continue;
+
+    if (c.Frame < EARLY_GAME_FRAMES && (tn === TYPE_NAMES.train || tn === TYPE_NAMES.unitMorph)) {
+      const u = cmdUnit(c);
+      if (u) {
+        const key = `${c.PlayerID}::${u.ID}`;
+        if (earlySeen.has(key)) continue;
+        earlySeen.add(key);
+      }
+    }
 
     const pid = c.PlayerID;
     const frame = c.Frame;

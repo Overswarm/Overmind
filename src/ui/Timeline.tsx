@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useAppStore } from '../state/store';
 import { FRAMES_PER_SECOND, formatMMSS, frameToSeconds } from '../types/replay';
 import { cachedSwings } from '../analysis/cache';
@@ -41,26 +41,25 @@ export function Timeline() {
     return () => window.removeEventListener('keydown', onKey);
   }, [active, currentFrame, isPlaying, setFrame, setPlaying]);
 
-  // Keep a ref for the rAF loop so it reads the latest frame without the
-  // useEffect closing over a stale value or re-subscribing each frame.
-  const currentFrameRef = useRef(currentFrame);
-  currentFrameRef.current = currentFrame;
-
   useEffect(() => {
     if (!active || !isPlaying) return;
     const total = active.replay.Header.Frames;
     let raf = 0;
     let last = performance.now();
+    // Local accumulator: the store floors currentFrame, so we can't rely on
+    // reading it back each tick — sub-frame progress would be lost and we'd
+    // never advance. Seed from the store, then step forward locally.
+    let frame = useAppStore.getState().currentFrame;
     const tick = (now: number) => {
       const dtSec = (now - last) / 1000;
       last = now;
-      const next = currentFrameRef.current + dtSec * FRAMES_PER_SECOND;
-      if (next >= total) {
+      frame += dtSec * FRAMES_PER_SECOND;
+      if (frame >= total) {
         useAppStore.getState().setFrame(total);
         setPlaying(false);
         return;
       }
-      useAppStore.getState().setFrame(next);
+      useAppStore.getState().setFrame(frame);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -82,7 +81,11 @@ export function Timeline() {
   return (
     <div className="flex h-20 items-center gap-3 px-4">
       <button
-        onClick={() => setPlaying(!isPlaying)}
+        onClick={() => {
+          // Starting from the very end just ends immediately — rewind first.
+          if (!isPlaying && currentFrame >= total) setFrame(0);
+          setPlaying(!isPlaying);
+        }}
         className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elev)] text-[var(--color-text-h)] hover:border-[var(--color-accent)]"
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >

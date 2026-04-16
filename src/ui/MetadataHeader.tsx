@@ -19,6 +19,20 @@ export function MetadataHeader() {
 
   const mapTitle = cleanBwString(active.replay.MapData?.Name || h.Map) || active.name;
 
+  // Who left the game, and when. screp records per-player LeaveGameCmds in
+  // Computed; the replay saver's leave is not recorded, so absence of a leave
+  // for a player isn't proof they stayed.
+  const leaves = (c?.LeaveGameCmds ?? [])
+    .map((l) => {
+      const player = (h.Players || []).find((p) => p.ID === l.PlayerID);
+      return {
+        name: player ? cleanBwString(player.Name) : `P${l.PlayerID}`,
+        seconds: frameToSeconds(l.Frame),
+        reason: (l as { Reason?: { Name?: string } }).Reason?.Name,
+      };
+    })
+    .sort((a, b) => a.seconds - b.seconds);
+
   return (
     <div className="flex h-14 items-center gap-4 px-4">
       <div>
@@ -27,6 +41,12 @@ export function MetadataHeader() {
           {matchup} · {duration}
           {h.StartTime ? ` · ${new Date(h.StartTime).toLocaleString()}` : ''}
           {winners}
+          {leaves.map((l, i) => (
+            <span key={i} className="ml-2 text-[var(--color-muted)]">
+              · {l.name} left {formatMMSS(l.seconds)}
+              {l.reason && l.reason !== 'Quit' ? ` (${l.reason})` : ''}
+            </span>
+          ))}
         </div>
       </div>
       <div className="ml-auto flex items-center gap-3 text-xs text-[var(--color-muted)]">

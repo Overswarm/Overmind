@@ -69,11 +69,18 @@ export function cmdUpgradeName(cmd: ReplayCommand): string | undefined {
 }
 
 // Effective commands are actions screp deemed non-redundant (not spam). This
-// classification is populated by rep.Compute() on the Go side. A command is
-// effective if it has no IneffKind set, or if its IneffKind is empty.
+// classification is populated by rep.Compute() on the Go side. screp serialises
+// IneffKind as a plain JSON string ("Effective", "FastRepetition", ...) via a
+// custom MarshalJSON; older / hypothetical builds could emit a number or an
+// object, so we accept any of those shapes.
 export function isEffective(cmd: ReplayCommand): boolean {
-  const k = cmd.IneffKind as { Name?: string } | undefined;
-  if (!k) return true;
-  const name = k.Name;
-  return !name || name === '' || name === 'Effective';
+  const k = cmd.IneffKind;
+  if (k === undefined || k === null) return true;
+  if (typeof k === 'string') return k === '' || k === 'Effective';
+  if (typeof k === 'number') return k === 0;
+  if (typeof k === 'object') {
+    const name = (k as { Name?: string }).Name;
+    return !name || name === '' || name === 'Effective';
+  }
+  return true;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useAppStore } from '../state/store';
 import { FRAMES_PER_SECOND, formatMMSS, frameToSeconds } from '../types/replay';
 import { cachedSwings } from '../analysis/cache';
@@ -41,6 +41,11 @@ export function Timeline() {
     return () => window.removeEventListener('keydown', onKey);
   }, [active, currentFrame, isPlaying, setFrame, setPlaying]);
 
+  // Keep a ref for the rAF loop so it reads the latest frame without the
+  // useEffect closing over a stale value or re-subscribing each frame.
+  const currentFrameRef = useRef(currentFrame);
+  currentFrameRef.current = currentFrame;
+
   useEffect(() => {
     if (!active || !isPlaying) return;
     const total = active.replay.Header.Frames;
@@ -61,10 +66,6 @@ export function Timeline() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [active, isPlaying, setPlaying]);
-
-  // Keep a ref for the rAF loop without re-subscribing every frame.
-  const currentFrameRef = { current: currentFrame };
-  currentFrameRef.current = currentFrame;
 
   if (!active) {
     return (

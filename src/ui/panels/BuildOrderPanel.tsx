@@ -5,9 +5,9 @@ import {
   buildOrderToCsv,
   buildOrderToJson,
   buildOrderToText,
-  computeBuildOrder,
   type BuildOrderEvent,
 } from '../../analysis/buildOrder';
+import { cachedBuildOrder } from '../../analysis/cache';
 
 const KIND_LABELS: Record<BuildOrderEvent['kind'], string> = {
   train: 'train',
@@ -51,7 +51,7 @@ export function BuildOrderPanel() {
 
   const { events, playerNames, activeIndex } = useMemo(() => {
     if (!active) return { events: [] as BuildOrderEvent[], playerNames: {} as Record<number, string>, activeIndex: -1 };
-    const all = computeBuildOrder(active.replay);
+    const all = cachedBuildOrder(active.hash, active.replay);
     const ev = filterPID == null ? all : all.filter((e) => e.playerID === filterPID);
     const names: Record<number, string> = {};
     for (const p of active.replay.Header?.Players ?? []) names[p.ID] = cleanBwString(p.Name);

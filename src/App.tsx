@@ -8,14 +8,17 @@ import { BuildOrderPanel } from './ui/panels/BuildOrderPanel';
 import { RosterPanel } from './ui/panels/RosterPanel';
 import { ApmPanel } from './ui/panels/ApmPanel';
 import { ChatPanel } from './ui/panels/ChatPanel';
+import { HeatmapPanel } from './ui/panels/HeatmapPanel';
 import { DebugPanel } from './ui/panels/DebugPanel';
 import { useAppStore } from './state/store';
+
+type RightPanel = 'heatmap' | 'debug' | null;
 
 function App() {
   const active = useAppStore((s) => s.active);
   const loading = useAppStore((s) => s.loading);
   const error = useAppStore((s) => s.error);
-  const [showDebug, setShowDebug] = useState(false);
+  const [rightPanel, setRightPanel] = useState<RightPanel>('heatmap');
 
   return (
     <div className="grid h-screen w-screen grid-rows-[auto_1fr_auto] bg-[var(--color-bg)]">
@@ -24,13 +27,22 @@ function App() {
           <MetadataHeader />
         </div>
         {active && (
-          <button
-            onClick={() => setShowDebug((v) => !v)}
-            className="border-l border-[var(--color-border)] px-3 text-[10px] uppercase tracking-wide text-[var(--color-muted)] hover:text-[var(--color-text-h)]"
-            title="Toggle raw screp output panel"
-          >
-            Debug
-          </button>
+          <div className="flex items-stretch">
+            {(['heatmap', 'debug'] as const).map((key) => (
+              <button
+                key={key}
+                onClick={() => setRightPanel((cur) => (cur === key ? null : key))}
+                className={`border-l border-[var(--color-border)] px-3 text-[10px] uppercase tracking-wide ${
+                  rightPanel === key
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
+                }`}
+                title={key === 'heatmap' ? 'Toggle activity heatmap' : 'Toggle raw screp output'}
+              >
+                {key}
+              </button>
+            ))}
+          </div>
         )}
       </header>
 
@@ -56,10 +68,15 @@ function App() {
             </div>
           ) : (
             <div className="grid h-full grid-cols-12 grid-rows-6 gap-3">
-              <div className={showDebug ? 'col-span-8 row-span-3' : 'col-span-12 row-span-3'}>
+              <div className={rightPanel ? 'col-span-8 row-span-3' : 'col-span-12 row-span-3'}>
                 <DualTrackPanel />
               </div>
-              {showDebug && (
+              {rightPanel === 'heatmap' && (
+                <div className="col-span-4 row-span-3">
+                  <HeatmapPanel />
+                </div>
+              )}
+              {rightPanel === 'debug' && (
                 <div className="col-span-4 row-span-3">
                   <DebugPanel />
                 </div>

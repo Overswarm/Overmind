@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { AlignedData, Options } from 'uplot';
 import { useAppStore } from '../../state/store';
-import { computeTimeSeries } from '../../analysis/timeseries';
+import { cachedTimeSeries } from '../../analysis/cache';
 import { cleanBwString, FRAMES_PER_SECOND, formatMMSS } from '../../types/replay';
 import { UPlotChart } from '../UPlotChart';
 
@@ -25,7 +25,7 @@ export function DualTrackPanel() {
 
   const series = useMemo(() => {
     if (!active) return null;
-    return computeTimeSeries(active.replay, 1);
+    return cachedTimeSeries(active.hash, active.replay, 1);
   }, [active]);
 
   const { data, options, atCursor } = useMemo(() => {

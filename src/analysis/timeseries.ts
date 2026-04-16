@@ -6,7 +6,7 @@
 // counts from the most recent Train/UnitMorph/Build command.
 
 import type { ParsedReplay } from '../types/replay';
-import { cmdUnit, TYPE_NAMES } from './commands';
+import { cmdUnit, isEffective, TYPE_NAMES } from './commands';
 import { unitMeta } from './units';
 
 export interface PlayerSeries {
@@ -56,6 +56,7 @@ export function computeTimeSeries(replay: ParsedReplay, stepSeconds = 1): DualTr
     const tn = c.Type?.Name;
     if (!tn) continue;
     if (tn !== TYPE_NAMES.train && tn !== TYPE_NAMES.unitMorph) continue;
+    if (!isEffective(c)) continue;
 
     const pid = c.PlayerID;
     const s = seriesByPID.get(pid);

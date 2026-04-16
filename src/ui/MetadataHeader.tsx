@@ -1,15 +1,13 @@
 import { useMemo } from 'react';
 import { useAppStore } from '../state/store';
 import { cleanBwString, formatMMSS, frameToSeconds, raceLetter } from '../types/replay';
-import { computeBuildOrder } from '../analysis/buildOrder';
-import { classifyOpenings } from '../analysis/openings';
+import { cachedOpenings } from '../analysis/cache';
 
 export function MetadataHeader() {
   const active = useAppStore((s) => s.active);
   const openings = useMemo(() => {
     if (!active) return [];
-    const ev = computeBuildOrder(active.replay);
-    return classifyOpenings(active.replay, ev);
+    return cachedOpenings(active.hash, active.replay);
   }, [active]);
   if (!active) {
     return (

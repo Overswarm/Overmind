@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAppStore } from '../../state/store';
 import { cleanBwString } from '../../types/replay';
-import { computeBuildOrder } from '../../analysis/buildOrder';
+import { cachedBuildOrder } from '../../analysis/cache';
 import { computeRoster, type RosterForPlayer, type RosterRole } from '../../analysis/roster';
 
 const ROLE_ORDER: RosterRole[] = ['worker', 'army', 'building'];
@@ -17,7 +17,7 @@ export function RosterPanel() {
 
   const { players, rosters } = useMemo(() => {
     if (!active) return { players: [] as { id: number; name: string }[], rosters: new Map<number, RosterForPlayer>() };
-    const events = computeBuildOrder(active.replay);
+    const events = cachedBuildOrder(active.hash, active.replay);
     const rosters = computeRoster(events, currentFrame);
     const players = (active.replay.Header?.Players ?? [])
       .filter((p) => !p.Observer)

@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import { useAppStore } from '../state/store';
 import { FRAMES_PER_SECOND, formatMMSS, frameToSeconds } from '../types/replay';
-import { computeBuildOrder } from '../analysis/buildOrder';
-import { computeSwingMarkers, type SwingMarker } from '../analysis/swings';
+import { cachedSwings } from '../analysis/cache';
+import type { SwingMarker } from '../analysis/swings';
 
 const KIND_COLOR: Record<SwingMarker['kind'], string> = {
   expansion: 'var(--color-accent)',
@@ -105,8 +105,7 @@ function SwingTrack({ total }: { total: number }) {
 
   const markers = useMemo(() => {
     if (!active) return [];
-    const ev = computeBuildOrder(active.replay);
-    return computeSwingMarkers(ev);
+    return cachedSwings(active.hash, active.replay);
   }, [active]);
 
   const players = (active?.replay.Header?.Players ?? []).filter((p) => !p.Observer);

@@ -1,0 +1,6 @@
+github.com/icza/gox v0.2.0 h1:+0N8PCt9/QSx+k0dqe/wdlXJNR/haaPsPwrTJTNDeyk=
+github.com/icza/gox v0.2.0/go.mod h1:rVecw5Q6POJAWBcXgCZdAtwK/hmoNehxCkAP3sMnOIc=
+github.com/icza/screp v1.12.11 h1:kL2s3EIWe/utu6zFeNvW+SKzdZbceguk5mhpKtBh63E=
+github.com/icza/screp v1.12.11/go.mod h1:yic7/u8MX0w0lw1Q1UTvLwHqRMkt0zhXWa/Ov5rrShY=
+golang.org/x/text v0.25.0 h1:qVyWApTSYLk/drJRO5mDlNYskwQznZmkpV2c8q9zls4=
+golang.org/x/text v0.25.0/go.mod h1:WEdwpYrmk1qmdHvhkSTNPm3app7v4rsT8F2UD6+VHIA=

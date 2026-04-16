@@ -1,0 +1,37 @@
+@import 'tailwindcss';
+@import 'uplot/dist/uPlot.min.css';
+
+@theme {
+  --color-bg: #0b0d12;
+  --color-bg-elev: #12151d;
+  --color-bg-panel: #161a24;
+  --color-border: #242937;
+  --color-muted: #6b7280;
+  --color-text: #d1d5db;
+  --color-text-h: #f3f4f6;
+  --color-accent: #a855f7;
+  --color-accent-2: #22d3ee;
+  --color-player-a: #38bdf8;
+  --color-player-b: #f97316;
+  --font-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-accent) 40%, transparent);
+}

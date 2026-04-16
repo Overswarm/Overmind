@@ -3,6 +3,7 @@ import { Timeline } from './ui/Timeline';
 import { Library } from './ui/Library';
 import { DropZone } from './ui/DropZone';
 import { PlaceholderPanel } from './ui/panels/PlaceholderPanel';
+import { DebugPanel } from './ui/panels/DebugPanel';
 import { useAppStore } from './state/store';
 
 function App() {
@@ -42,7 +43,7 @@ function App() {
                 <PlaceholderPanel title="Dual-track timeline graph" hint="Workers, army value, and income — coming in Phase 1." />
               </div>
               <div className="col-span-4 row-span-3">
-                <PlaceholderPanel title="Live roster" hint="Units & buildings at current timestamp — Phase 2." />
+                <DebugPanel />
               </div>
               <div className="col-span-5 row-span-3">
                 <PlaceholderPanel title="Build order" hint="Chronological construction & training — Phase 1." />

@@ -9,6 +9,8 @@ import { computeTimeSeries, type DualTrackSeries } from './timeseries';
 import { computeSwingMarkers, type SwingMarker } from './swings';
 import { computeHeatmap, type HeatmapGrid, type HeatmapMode } from './heatmap';
 import { computeHotkeyStats, type HotkeyStats } from './hotkeys';
+import { computeSupplyBlocks, type SupplyBlocks } from './supplyBlocks';
+import { computeProductionIdle, type ProductionIdle } from './productionIdle';
 
 interface Entry {
   hash: string;
@@ -17,6 +19,8 @@ interface Entry {
   swings?: SwingMarker[];
   heatmaps?: Map<HeatmapMode, HeatmapGrid>;
   hotkeys?: HotkeyStats;
+  supplyBlocks?: SupplyBlocks;
+  productionIdle?: ProductionIdle;
 }
 
 // LRU-1: BW replays are large and there's only one active one at a time, so a
@@ -43,7 +47,7 @@ export function cachedTimeSeries(hash: string, replay: ParsedReplay, stepSeconds
 
 export function cachedSwings(hash: string, replay: ParsedReplay): SwingMarker[] {
   const e = entryFor(hash);
-  if (!e.swings) e.swings = computeSwingMarkers(cachedBuildOrder(hash, replay));
+  if (!e.swings) e.swings = computeSwingMarkers(cachedBuildOrder(hash, replay), replay);
   return e.swings;
 }
 
@@ -51,6 +55,28 @@ export function cachedHotkeyStats(hash: string, replay: ParsedReplay): HotkeySta
   const e = entryFor(hash);
   if (!e.hotkeys) e.hotkeys = computeHotkeyStats(replay);
   return e.hotkeys;
+}
+
+export function cachedSupplyBlocks(hash: string, replay: ParsedReplay): SupplyBlocks {
+  const e = entryFor(hash);
+  if (!e.supplyBlocks) {
+    const events = cachedBuildOrder(hash, replay);
+    const pids = (replay.Header?.Players ?? []).filter((p) => !p.Observer).map((p) => p.ID);
+    const total = replay.Header?.Frames ?? 0;
+    e.supplyBlocks = computeSupplyBlocks(events, pids, total);
+  }
+  return e.supplyBlocks;
+}
+
+export function cachedProductionIdle(hash: string, replay: ParsedReplay): ProductionIdle {
+  const e = entryFor(hash);
+  if (!e.productionIdle) {
+    const events = cachedBuildOrder(hash, replay);
+    const pids = (replay.Header?.Players ?? []).filter((p) => !p.Observer).map((p) => p.ID);
+    const total = replay.Header?.Frames ?? 0;
+    e.productionIdle = computeProductionIdle(events, pids, total);
+  }
+  return e.productionIdle;
 }
 
 export function cachedHeatmap(hash: string, replay: ParsedReplay, mode: HeatmapMode): HeatmapGrid {

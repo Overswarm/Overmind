@@ -8,6 +8,7 @@ const KIND_COLOR: Record<SwingMarker['kind'], string> = {
   expansion: 'var(--color-accent)',
   tech: '#a78bfa',
   unit: '#f59e0b',
+  scout: '#34d399',
 };
 
 const PLAYBACK_SPEEDS = [0.5, 1, 2, 4, 8] as const;
@@ -176,6 +177,7 @@ function SwingTrack({ total }: { total: number }) {
           <span className="mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.expansion }} /> expand
           <span className="ml-3 mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.tech }} /> tech
           <span className="ml-3 mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.unit }} /> 1st unit
+          <span className="ml-3 mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.scout }} /> scout
         </span>
         <span>top = P1 · bottom = P2</span>
       </div>

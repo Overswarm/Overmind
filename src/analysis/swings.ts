@@ -1,18 +1,21 @@
 // "Swing markers" are moments worth scrubbing to: expansions, first-of-tech
-// buildings, and key unit reveals. Without death / damage data we can't detect
-// army trades, so these are strategic markers rather than combat ones.
+// buildings, key unit reveals, and first-scout events. Without death / damage
+// data we can't detect army trades, so these are strategic markers rather
+// than combat ones.
 //
 // A marker is a (frame, playerID, label) triple. The timeline renders these as
 // small ticks, color-matched to the player.
 
+import type { ParsedReplay } from '../types/replay';
 import type { BuildOrderEvent } from './buildOrder';
+import { computeScouts } from './scouting';
 
 export interface SwingMarker {
   frame: number;
   seconds: number;
   playerID: number;
   label: string;
-  kind: 'expansion' | 'tech' | 'unit';
+  kind: 'expansion' | 'tech' | 'unit' | 'scout';
 }
 
 // First-of-kind tech buildings worth marking. Keyed by unit name from units.ts.
@@ -39,11 +42,23 @@ const UNIT_FIRSTS = new Set<string>([
 // Expansion buildings per race (second and later count as expansions).
 const EXPANSION_NAMES = new Set(['Hatchery', 'Nexus', 'Command Center']);
 
-export function computeSwingMarkers(events: BuildOrderEvent[]): SwingMarker[] {
+export function computeSwingMarkers(events: BuildOrderEvent[], replay?: ParsedReplay): SwingMarker[] {
   const out: SwingMarker[] = [];
   const seenTech = new Set<string>();       // key: `${pid}::${name}`
   const seenUnit = new Set<string>();
   const expansionCount = new Map<number, number>();
+
+  if (replay) {
+    for (const s of computeScouts(replay)) {
+      out.push({
+        frame: s.frame,
+        seconds: s.seconds,
+        playerID: s.playerID,
+        label: s.label,
+        kind: 'scout',
+      });
+    }
+  }
 
   for (const e of events) {
     const techKey = `${e.playerID}::${e.name}`;

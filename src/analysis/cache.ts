@@ -37,7 +37,7 @@ export function cachedBuildOrder(hash: string, replay: ParsedReplay): BuildOrder
 
 export function cachedTimeSeries(hash: string, replay: ParsedReplay, stepSeconds = 1): DualTrackSeries {
   const e = entryFor(hash);
-  if (!e.timeSeries) e.timeSeries = computeTimeSeries(replay, stepSeconds);
+  if (!e.timeSeries) e.timeSeries = computeTimeSeries(replay, cachedBuildOrder(hash, replay), stepSeconds);
   return e.timeSeries;
 }
 

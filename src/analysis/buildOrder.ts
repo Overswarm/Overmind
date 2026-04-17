@@ -86,6 +86,7 @@ export interface BuildOrderEvent {
   playerID: number;
   kind: 'train' | 'morph' | 'build' | 'buildingMorph' | 'tech' | 'upgrade' | 'cancel';
   name: string;                 // User-facing label (e.g. "Spawning Pool", "Stim Pack")
+  unitID?: number;              // Present for train/morph/build/buildingMorph.
   supply: number;               // Supply produced by this player *before* this event
   workers: number;              // Worker-type units produced by this player *before* this event
 }
@@ -163,7 +164,7 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
         const u = cmdUnit(c);
         const meta = u ? unitMeta(u.ID) : undefined;
         if (!meta) break;
-        out.push({ frame, seconds, playerID: pid, kind: 'train', name: meta.name, supply, workers });
+        out.push({ frame, seconds, playerID: pid, kind: 'train', name: meta.name, unitID: u!.ID, supply, workers });
         const count = meta.perMorph ?? 1;
         supplyByPID.set(pid, supply + meta.supply * count);
         if (meta.isWorker) workersByPID.set(pid, workers + count);
@@ -173,7 +174,7 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
         const u = cmdUnit(c);
         const meta = u ? unitMeta(u.ID) : undefined;
         if (!meta) break;
-        out.push({ frame, seconds, playerID: pid, kind: 'morph', name: meta.name, supply, workers });
+        out.push({ frame, seconds, playerID: pid, kind: 'morph', name: meta.name, unitID: u!.ID, supply, workers });
         // Unit morphs (Zergling, Mutalisk, Lurker, etc.) pay the morph supply.
         const count = meta.perMorph ?? 1;
         supplyByPID.set(pid, supply + meta.supply * count);
@@ -183,7 +184,7 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
         const u = cmdUnit(c);
         const meta = u ? unitMeta(u.ID) : undefined;
         if (!meta) break;
-        out.push({ frame, seconds, playerID: pid, kind: 'build', name: meta.name, supply, workers });
+        out.push({ frame, seconds, playerID: pid, kind: 'build', name: meta.name, unitID: u!.ID, supply, workers });
         if (meta.isBuilding) bumpBuilding(pid, u!.ID);
         break;
       }
@@ -191,7 +192,7 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
         const u = cmdUnit(c);
         const meta = u ? unitMeta(u.ID) : undefined;
         if (!meta) break;
-        out.push({ frame, seconds, playerID: pid, kind: 'buildingMorph', name: meta.name, supply, workers });
+        out.push({ frame, seconds, playerID: pid, kind: 'buildingMorph', name: meta.name, unitID: u!.ID, supply, workers });
         if (meta.isBuilding) bumpBuilding(pid, u!.ID);
         break;
       }

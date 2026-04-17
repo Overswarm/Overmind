@@ -26,6 +26,10 @@ export interface LibraryEntry {
   durationFrames?: number;
   startTime?: string;
   winnerTeam?: number;
+
+  // User-authored notes. Typed in the Notes panel and persisted on change.
+  notes?: string;
+  notesUpdatedAt?: number;
 }
 
 export interface ParsedEntry {
@@ -48,6 +52,11 @@ export const db = new Dexie('overmind') as OvermindDB;
 db.version(1).stores({
   library: 'hash, addedAt, lastOpenedAt, mapName, matchup, startTime',
   parsed: 'hash, cachedAt',
+});
+// v2: add notesUpdatedAt index so the library can surface "recently annotated"
+// later. No data migration needed — Dexie carries forward existing rows.
+db.version(2).stores({
+  library: 'hash, addedAt, lastOpenedAt, mapName, matchup, startTime, notesUpdatedAt',
 });
 
 export async function sha256Hex(bytes: ArrayBuffer | Uint8Array): Promise<string> {
@@ -103,4 +112,13 @@ export async function touchLibraryEntry(hash: string): Promise<void> {
 
 export async function listLibrary(): Promise<LibraryEntry[]> {
   return db.library.orderBy('addedAt').reverse().toArray();
+}
+
+export async function getNotes(hash: string): Promise<string> {
+  const row = await db.library.get(hash);
+  return row?.notes ?? '';
+}
+
+export async function setNotes(hash: string, notes: string): Promise<void> {
+  await db.library.update(hash, { notes, notesUpdatedAt: Date.now() });
 }

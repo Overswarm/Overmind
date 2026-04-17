@@ -10,10 +10,11 @@ import { ApmPanel } from './ui/panels/ApmPanel';
 import { ChatPanel } from './ui/panels/ChatPanel';
 import { HeatmapPanel } from './ui/panels/HeatmapPanel';
 import { HotkeyPanel } from './ui/panels/HotkeyPanel';
+import { NotesPanel } from './ui/panels/NotesPanel';
 import { DebugPanel } from './ui/panels/DebugPanel';
 import { useAppStore } from './state/store';
 
-type RightPanel = 'heatmap' | 'hotkeys' | 'debug' | null;
+type RightPanel = 'heatmap' | 'hotkeys' | 'notes' | 'debug' | null;
 
 function App() {
   const active = useAppStore((s) => s.active);
@@ -29,7 +30,7 @@ function App() {
         </div>
         {active && (
           <div className="flex items-stretch">
-            {(['heatmap', 'hotkeys', 'debug'] as const).map((key) => (
+            {(['heatmap', 'hotkeys', 'notes', 'debug'] as const).map((key) => (
               <button
                 key={key}
                 onClick={() => setRightPanel((cur) => (cur === key ? null : key))}
@@ -43,7 +44,9 @@ function App() {
                     ? 'Toggle activity heatmap'
                     : key === 'hotkeys'
                       ? 'Toggle control-group analytics'
-                      : 'Toggle raw screp output'
+                      : key === 'notes'
+                        ? 'Toggle per-replay notes'
+                        : 'Toggle raw screp output'
                 }
               >
                 {key}
@@ -86,6 +89,11 @@ function App() {
               {rightPanel === 'hotkeys' && (
                 <div className="col-span-4 row-span-3">
                   <HotkeyPanel />
+                </div>
+              )}
+              {rightPanel === 'notes' && (
+                <div className="col-span-4 row-span-3">
+                  <NotesPanel />
                 </div>
               )}
               {rightPanel === 'debug' && (

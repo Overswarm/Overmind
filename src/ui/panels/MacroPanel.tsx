@@ -99,15 +99,19 @@ export function MacroPanel() {
                 <div className="mt-1">
                   {poolsWithBuildings.map((pl) => {
                     const pct = Math.round(pl.idleRatio * 100);
-                    const idleSec = Math.round(pl.idleFrames / FRAMES_PER_SECOND);
+                    const idleSec = pl.idleFrames / FRAMES_PER_SECOND;
+                    const capSec = pl.capacityFrames / FRAMES_PER_SECOND;
                     return (
                       <div key={pl.id} className="mb-1">
                         <div className="flex items-baseline justify-between gap-2">
                           <span className="truncate text-[var(--color-text-h)]">
                             {pl.name} <span className="text-[var(--color-muted)]">×{pl.count}</span>
                           </span>
-                          <span className="font-mono tabular-nums text-[var(--color-muted)]">
-                            {pct}% idle · {formatMMSS(idleSec)}
+                          <span
+                            className="font-mono tabular-nums text-[var(--color-muted)]"
+                            title="Idle time summed across all buildings of this type / total production capacity"
+                          >
+                            {pct}% idle · {formatMMSS(idleSec)}/{formatMMSS(capSec)}
                           </span>
                         </div>
                         <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded bg-[var(--color-bg-elev)]">

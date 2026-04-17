@@ -44,10 +44,22 @@ const BUILD_TYPE_NAMES = new Set<string>([
   TYPE_NAMES.buildingMorph,
 ]);
 
+// BW's replay format stores positions in different units per command. Most
+// positional commands (Right Click, Targeted Order, minimap pings, etc.)
+// record pixel coordinates (0 .. mapTiles*32). The Build command, however,
+// records tile coordinates (0 .. mapTiles) because buildings snap to tile
+// boundaries. screp reads both as raw uint16 without conversion, so we
+// re-scale build positions up here; otherwise they collapse into the top-left
+// corner of the heatmap.
+const TILE_COORD_TYPE_NAMES = new Set<string>([TYPE_NAMES.build]);
+const PIXELS_PER_TILE = 32;
+
 function getPos(cmd: ReplayCommand): { X: number; Y: number } | undefined {
   const p = cmd.Pos as { X?: number; Y?: number } | undefined;
   if (!p || typeof p.X !== 'number' || typeof p.Y !== 'number') return undefined;
-  return { X: p.X, Y: p.Y };
+  const inTiles = TILE_COORD_TYPE_NAMES.has(cmd.Type?.Name ?? '');
+  const scale = inTiles ? PIXELS_PER_TILE : 1;
+  return { X: p.X * scale, Y: p.Y * scale };
 }
 
 export function computeHeatmap(replay: ParsedReplay, opts: HeatmapOptions = {}): HeatmapGrid {

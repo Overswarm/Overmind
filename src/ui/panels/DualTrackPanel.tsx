@@ -5,13 +5,15 @@ import { cachedTimeSeries } from '../../analysis/cache';
 import { cleanBwString, FRAMES_PER_SECOND, formatMMSS } from '../../types/replay';
 import { UPlotChart } from '../UPlotChart';
 
-type Metric = 'workersProduced' | 'supplyProduced' | 'armyValue' | 'spent';
+type Metric = 'workersProduced' | 'supplyProduced' | 'armyValue' | 'spent' | 'apm' | 'eapm';
 
 const METRIC_LABELS: Record<Metric, string> = {
   workersProduced: 'Workers produced',
   supplyProduced: 'Supply produced',
   armyValue: 'Army value (min+gas)',
   spent: 'Total resources spent (min+gas)',
+  apm: 'APM (rolling 30s)',
+  eapm: 'EAPM (rolling 30s)',
 };
 
 // Two colors in sequence, matched to the metadata header dots.
@@ -93,7 +95,11 @@ export function DualTrackPanel() {
     const idx = Math.max(0, Math.min(series.timeSeconds.length - 1, Math.floor(t)));
     const atCursor = series.players.map((p, i) => ({
       name: cleanBwString(p.name),
-      value: p[metric][idx] ?? 0,
+      // APM/EAPM are rolling rates — round to integer for a clean cursor read.
+      // Everything else is already an integer count.
+      value: metric === 'apm' || metric === 'eapm'
+        ? Math.round(p[metric][idx] ?? 0)
+        : p[metric][idx] ?? 0,
       color: PLAYER_STROKES[i % PLAYER_STROKES.length],
     }));
     return { data, options, atCursor };

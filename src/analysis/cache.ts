@@ -9,6 +9,7 @@ import { computeTimeSeries, type DualTrackSeries } from './timeseries';
 import { computeSwingMarkers, type SwingMarker } from './swings';
 import { classifyOpenings, type OpeningLabel } from './openings';
 import { computeHeatmap, type HeatmapGrid, type HeatmapMode } from './heatmap';
+import { computeHotkeyStats, type HotkeyStats } from './hotkeys';
 
 interface Entry {
   hash: string;
@@ -17,6 +18,7 @@ interface Entry {
   swings?: SwingMarker[];
   openings?: OpeningLabel[];
   heatmaps?: Map<HeatmapMode, HeatmapGrid>;
+  hotkeys?: HotkeyStats;
 }
 
 // LRU-1: BW replays are large and there's only one active one at a time, so a
@@ -51,6 +53,12 @@ export function cachedOpenings(hash: string, replay: ParsedReplay): OpeningLabel
   const e = entryFor(hash);
   if (!e.openings) e.openings = classifyOpenings(replay, cachedBuildOrder(hash, replay));
   return e.openings;
+}
+
+export function cachedHotkeyStats(hash: string, replay: ParsedReplay): HotkeyStats {
+  const e = entryFor(hash);
+  if (!e.hotkeys) e.hotkeys = computeHotkeyStats(replay);
+  return e.hotkeys;
 }
 
 export function cachedHeatmap(hash: string, replay: ParsedReplay, mode: HeatmapMode): HeatmapGrid {

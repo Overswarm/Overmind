@@ -14,6 +14,7 @@ export interface PlayerSeries {
   workersProduced: number[];
   supplyProduced: number[];
   armyValue: number[];          // Mineral + gas spent on non-building army units
+  spent: number[];              // Cumulative mineral + gas committed to all units and buildings
 }
 
 export interface DualTrackSeries {
@@ -43,15 +44,16 @@ export function computeTimeSeries(
       workersProduced: new Array(xs.length).fill(0),
       supplyProduced: new Array(xs.length).fill(0),
       armyValue: new Array(xs.length).fill(0),
+      spent: new Array(xs.length).fill(0),
     });
   }
 
   const cumWorkers = new Map<number, number>();
   const cumSupply = new Map<number, number>();
   const cumArmy = new Map<number, number>();
+  const cumSpent = new Map<number, number>();
 
   for (const e of events) {
-    if (e.kind !== 'train' && e.kind !== 'morph') continue;
     const s = seriesByPID.get(e.playerID);
     if (!s) continue;
     const meta = e.unitID !== undefined ? unitMeta(e.unitID) : undefined;
@@ -59,6 +61,16 @@ export function computeTimeSeries(
     const count = meta.perMorph ?? 1;
 
     const idx = Math.min(xs.length - 1, Math.floor(e.seconds / stepSeconds));
+
+    // Spend applies to all productions: trains, morphs, and buildings. Tech
+    // and upgrade costs aren't in the unit table, so they're excluded — fine
+    // as a first approximation since most resources go to units/buildings.
+    if (e.kind === 'train' || e.kind === 'morph' || e.kind === 'build' || e.kind === 'buildingMorph') {
+      cumSpent.set(e.playerID, (cumSpent.get(e.playerID) ?? 0) + (meta.mineral + meta.gas) * count);
+      s.spent[idx] = cumSpent.get(e.playerID)!;
+    }
+
+    if (e.kind !== 'train' && e.kind !== 'morph') continue;
 
     if (meta.isWorker) {
       cumWorkers.set(e.playerID, (cumWorkers.get(e.playerID) ?? 0) + count);
@@ -77,6 +89,7 @@ export function computeTimeSeries(
     ffill(s.workersProduced);
     ffill(s.supplyProduced);
     ffill(s.armyValue);
+    ffill(s.spent);
   }
 
   return {

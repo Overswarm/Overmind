@@ -5,12 +5,13 @@ import { cachedTimeSeries } from '../../analysis/cache';
 import { cleanBwString, FRAMES_PER_SECOND, formatMMSS } from '../../types/replay';
 import { UPlotChart } from '../UPlotChart';
 
-type Metric = 'workersProduced' | 'supplyProduced' | 'armyValue';
+type Metric = 'workersProduced' | 'supplyProduced' | 'armyValue' | 'spent';
 
 const METRIC_LABELS: Record<Metric, string> = {
   workersProduced: 'Workers produced',
   supplyProduced: 'Supply produced',
   armyValue: 'Army value (min+gas)',
+  spent: 'Total resources spent (min+gas)',
 };
 
 // Two colors in sequence, matched to the metadata header dots.

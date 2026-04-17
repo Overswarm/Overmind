@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../state/store';
 import { FRAMES_PER_SECOND, formatMMSS, frameToSeconds } from '../types/replay';
 import { cachedSwings } from '../analysis/cache';
@@ -10,12 +10,19 @@ const KIND_COLOR: Record<SwingMarker['kind'], string> = {
   unit: '#f59e0b',
 };
 
+const PLAYBACK_SPEEDS = [0.5, 1, 2, 4, 8] as const;
+type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
+
 export function Timeline() {
   const active = useAppStore((s) => s.active);
   const currentFrame = useAppStore((s) => s.currentFrame);
   const setFrame = useAppStore((s) => s.setFrame);
   const isPlaying = useAppStore((s) => s.isPlaying);
   const setPlaying = useAppStore((s) => s.setPlaying);
+  const [speed, setSpeed] = useState<PlaybackSpeed>(1);
+  // Ref so the rAF loop reads the latest speed without re-subscribing.
+  const speedRef = useRef<PlaybackSpeed>(speed);
+  useEffect(() => { speedRef.current = speed; }, [speed]);
 
   useEffect(() => {
     // Keyboard controls only active when a replay is loaded.
@@ -53,7 +60,7 @@ export function Timeline() {
     const tick = (now: number) => {
       const dtSec = (now - last) / 1000;
       last = now;
-      frame += dtSec * FRAMES_PER_SECOND;
+      frame += dtSec * FRAMES_PER_SECOND * speedRef.current;
       if (frame >= total) {
         useAppStore.getState().setFrame(total);
         setPlaying(false);
@@ -93,6 +100,22 @@ export function Timeline() {
       </button>
       <div className="font-mono text-xs text-[var(--color-muted)] tabular-nums">
         {elapsed} / {totalStr}
+      </div>
+      <div className="flex items-center gap-0.5">
+        {PLAYBACK_SPEEDS.map((s) => (
+          <button
+            key={s}
+            onClick={() => setSpeed(s)}
+            className={`rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ${
+              speed === s
+                ? 'bg-[var(--color-accent)] text-white'
+                : 'border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
+            }`}
+            title={`Playback speed ${s}×`}
+          >
+            {s}×
+          </button>
+        ))}
       </div>
       <SwingTrack total={total} />
     </div>

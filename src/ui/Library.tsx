@@ -4,7 +4,7 @@ import { listLibrary, getCachedReplay, touchLibraryEntry, type LibraryEntry } fr
 import { useAppStore } from '../state/store';
 import { cleanBwString, formatMMSS, frameToSeconds } from '../types/replay';
 
-type SortKey = 'recent' | 'longest' | 'map';
+type SortKey = 'recent' | 'longest' | 'map' | 'annotated';
 
 export function Library() {
   const entries = useLiveQuery(() => listLibrary(), [], []);
@@ -39,7 +39,8 @@ export function Library() {
       list = list.filter((e) => {
         const map = cleanBwString(e.mapName || e.name).toLowerCase();
         const players = (e.players ?? []).map((p) => cleanBwString(p).toLowerCase());
-        return map.includes(q) || players.some((p) => p.includes(q));
+        const notes = (e.notes ?? '').toLowerCase();
+        return map.includes(q) || players.some((p) => p.includes(q)) || notes.includes(q);
       });
     }
     if (matchup) list = list.filter((e) => e.matchup === matchup);
@@ -48,6 +49,14 @@ export function Library() {
       sorted.sort((a, b) => (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt));
     } else if (sort === 'longest') {
       sorted.sort((a, b) => (b.durationFrames ?? 0) - (a.durationFrames ?? 0));
+    } else if (sort === 'annotated') {
+      // Annotated entries first (most-recent first), then the rest by recency.
+      sorted.sort((a, b) => {
+        const an = a.notes && a.notes.trim() ? (a.notesUpdatedAt ?? 0) : -1;
+        const bn = b.notes && b.notes.trim() ? (b.notesUpdatedAt ?? 0) : -1;
+        if (an !== bn) return bn - an;
+        return (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt);
+      });
     } else {
       sorted.sort((a, b) =>
         (cleanBwString(a.mapName || a.name)).localeCompare(cleanBwString(b.mapName || b.name))
@@ -94,6 +103,7 @@ export function Library() {
           >
             <option value="recent">Recent</option>
             <option value="longest">Longest</option>
+            <option value="annotated">Annotated</option>
             <option value="map">Map A–Z</option>
           </select>
         </div>
@@ -113,8 +123,17 @@ export function Library() {
                 }`}
                 onClick={() => onOpen(e.hash, e.name, e.path)}
               >
-                <div className="truncate font-medium text-[var(--color-text-h)]">
-                  {cleanBwString(e.mapName) || e.name}
+                <div className="flex items-center gap-1.5 truncate font-medium text-[var(--color-text-h)]">
+                  {e.notes && e.notes.trim() && (
+                    <span
+                      className="text-[var(--color-accent)]"
+                      title="Has notes"
+                      aria-label="Has notes"
+                    >
+                      ★
+                    </span>
+                  )}
+                  <span className="truncate">{cleanBwString(e.mapName) || e.name}</span>
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-muted)]">
                   <span className="rounded bg-[var(--color-bg-elev)] px-1.5 py-0.5 font-mono">{e.matchup || '??'}</span>

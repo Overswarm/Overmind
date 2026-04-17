@@ -21,6 +21,7 @@ export function DualTrackPanel() {
   const active = useAppStore((s) => s.active);
   const currentFrame = useAppStore((s) => s.currentFrame);
   const setFrame = useAppStore((s) => s.setFrame);
+  const setHoverFrame = useAppStore((s) => s.setHoverFrame);
 
   const [metric, setMetric] = useState<Metric>('supplyProduced');
 
@@ -38,15 +39,32 @@ export function DualTrackPanel() {
       height: 260,
       padding: [8, 8, 24, 40],
       cursor: {
-        // Syncing horizontal cursor across panels could come later; for now,
-        // clicking jumps the main timeline to the cursor's x position.
+        // Clicks jump the main timeline to the cursor position; moves publish
+        // a hoverFrame so other panels can highlight the same moment.
         bind: {
           mouseup: (self, _target, handler) => (ev: MouseEvent) => {
             const x = self.posToVal(ev.offsetX, 'x');
             if (Number.isFinite(x)) setFrame(x * FRAMES_PER_SECOND);
             return handler(ev);
           },
+          mouseleave: (_self, _target, handler) => (ev: MouseEvent) => {
+            setHoverFrame(null);
+            return handler(ev);
+          },
         },
+      },
+      hooks: {
+        setCursor: [
+          (self) => {
+            const idx = self.cursor.idx;
+            if (idx == null) {
+              setHoverFrame(null);
+              return;
+            }
+            const t = self.data[0]?.[idx];
+            if (typeof t === 'number') setHoverFrame(t * FRAMES_PER_SECOND);
+          },
+        ],
       },
       scales: { x: { time: false } },
       axes: [
@@ -79,7 +97,7 @@ export function DualTrackPanel() {
       color: PLAYER_STROKES[i % PLAYER_STROKES.length],
     }));
     return { data, options, atCursor };
-  }, [series, metric, currentFrame, setFrame]);
+  }, [series, metric, currentFrame, setFrame, setHoverFrame]);
 
   if (!active) return null;
 

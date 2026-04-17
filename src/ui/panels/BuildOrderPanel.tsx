@@ -32,6 +32,7 @@ const KIND_COLORS: Record<BuildOrderEvent['kind'], string> = {
 export function BuildOrderPanel() {
   const active = useAppStore((s) => s.active);
   const currentFrame = useAppStore((s) => s.currentFrame);
+  const hoverFrame = useAppStore((s) => s.hoverFrame);
   const setFrame = useAppStore((s) => s.setFrame);
   const listRef = useRef<HTMLDivElement>(null);
   // null = show all players; a number selects a single PID.
@@ -62,6 +63,19 @@ export function BuildOrderPanel() {
     }
     return { events: ev, playerNames: names, activeIndex: idx };
   }, [active, currentFrame, filterPID]);
+
+  // Index of the event closest to the hover frame from the chart. We want the
+  // last event at-or-before hoverFrame so the highlight matches the current
+  // chart cursor semantics (same as activeIndex but for hover).
+  const hoverIndex = useMemo(() => {
+    if (hoverFrame == null) return -1;
+    let idx = -1;
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].frame <= hoverFrame) idx = i;
+      else break;
+    }
+    return idx;
+  }, [hoverFrame, events]);
 
   useEffect(() => {
     if (activeIndex < 0 || !listRef.current) return;
@@ -158,7 +172,11 @@ export function BuildOrderPanel() {
               data-idx={i}
               onClick={() => setFrame(e.frame)}
               className={`grid cursor-pointer grid-cols-[48px_36px_1fr_auto] items-baseline gap-2 px-3 py-1 hover:bg-[var(--color-bg-elev)] ${
-                i === activeIndex ? 'bg-[color-mix(in_oklab,var(--color-accent)_20%,transparent)]' : ''
+                i === activeIndex
+                  ? 'bg-[color-mix(in_oklab,var(--color-accent)_20%,transparent)]'
+                  : i === hoverIndex
+                    ? 'bg-[color-mix(in_oklab,var(--color-accent)_9%,transparent)]'
+                    : ''
               }`}
               title={`Click to jump to ${formatMMSS(e.seconds)}`}
             >

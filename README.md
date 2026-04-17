@@ -49,6 +49,11 @@ npm install   # first time only
 npm start     # or: npm run dev
 ```
 
+## Update
+
+To pull the latest code and refresh dependencies, run `update.bat` (Windows) or
+`./update.sh` (macOS/Linux). Then start the app as normal.
+
 Drop `.rep` files or a folder onto the main panel. Parsed replays are cached
 by SHA-256 of their bytes, so re-opening is instant.
 

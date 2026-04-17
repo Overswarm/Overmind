@@ -13,6 +13,73 @@ import type { ParsedReplay, ReplayCommand } from '../types/replay';
 import { cmdTechName, cmdUnit, cmdUpgradeName, isEffective, isType, TYPE_NAMES } from './commands';
 import { unitMeta } from './units';
 
+// Screp's IneffKind heuristic catches most spam, but consistently misses
+// first-seconds mashing because there's no prior "effective" command to
+// compare against. We layer an explicit production-budget filter on top of
+// it. For every unit ID we know, we hardcode:
+//   - trainFrames: nominal production time (rounded to nearest ~0.25s)
+//   - sourceIDs: the structure(s) that produce this unit
+//   - larvaBased: true for Zerg (each hatch provides 3 concurrent slots)
+// At Train/UnitMorph time we compute minGap = trainFrames / max(1, effective
+// production slots) and drop same-(player,unit) commands closer than that.
+// Effective slots = sum of sourceID building counts this player has started,
+// times 3 if larvaBased. Counts increment on Build/BuildingMorph so they
+// grow as the game progresses. Every player is seeded with 1 town hall of
+// each race (harmless cross-race seed since you can't train units whose
+// source you don't have).
+interface ProductionInfo {
+  trainFrames: number;
+  sourceIDs: number[];
+  larvaBased?: boolean;
+}
+
+const PRODUCTION_SOURCE: Record<number, ProductionInfo> = {
+  // --- Terran ---
+  0x07: { trainFrames: 300, sourceIDs: [0x6a] },                         // SCV ← CC
+  0x00: { trainFrames: 360, sourceIDs: [0x6f] },                         // Marine ← Rax
+  0x22: { trainFrames: 360, sourceIDs: [0x6f] },                         // Medic
+  0x20: { trainFrames: 360, sourceIDs: [0x6f] },                         // Firebat
+  0x01: { trainFrames: 540, sourceIDs: [0x6f] },                         // Ghost
+  0x02: { trainFrames: 360, sourceIDs: [0x71] },                         // Vulture ← Factory
+  0x05: { trainFrames: 540, sourceIDs: [0x71] },                         // Siege Tank
+  0x03: { trainFrames: 480, sourceIDs: [0x71] },                         // Goliath
+  0x08: { trainFrames: 600, sourceIDs: [0x72] },                         // Wraith ← Starport
+  0x0b: { trainFrames: 600, sourceIDs: [0x72] },                         // Dropship
+  0x09: { trainFrames: 600, sourceIDs: [0x72] },                         // Science Vessel
+  0x3a: { trainFrames: 600, sourceIDs: [0x72] },                         // Valkyrie
+  0x0c: { trainFrames: 1200, sourceIDs: [0x72] },                        // Battlecruiser
+  // --- Protoss ---
+  0x40: { trainFrames: 300, sourceIDs: [0x9a] },                         // Probe ← Nexus
+  0x41: { trainFrames: 480, sourceIDs: [0xa0] },                         // Zealot ← Gateway
+  0x42: { trainFrames: 600, sourceIDs: [0xa0] },                         // Dragoon
+  0x43: { trainFrames: 720, sourceIDs: [0xa0] },                         // High Templar
+  0x3d: { trainFrames: 720, sourceIDs: [0xa0] },                         // Dark Templar
+  0x45: { trainFrames: 720, sourceIDs: [0x9b] },                         // Shuttle ← Robo
+  0x53: { trainFrames: 840, sourceIDs: [0x9b] },                         // Reaver
+  0x54: { trainFrames: 480, sourceIDs: [0x9b] },                         // Observer
+  0x46: { trainFrames: 960, sourceIDs: [0xa7] },                         // Scout ← Stargate
+  0x3c: { trainFrames: 480, sourceIDs: [0xa7] },                         // Corsair
+  0x47: { trainFrames: 960, sourceIDs: [0xa7] },                         // Arbiter
+  0x48: { trainFrames: 1200, sourceIDs: [0xa7] },                        // Carrier
+  // --- Zerg (larva-based, from Hatch/Lair/Hive) ---
+  0x29: { trainFrames: 300, sourceIDs: [0x83, 0x84, 0x85], larvaBased: true }, // Drone
+  0x2a: { trainFrames: 360, sourceIDs: [0x83, 0x84, 0x85], larvaBased: true }, // Overlord
+  0x25: { trainFrames: 360, sourceIDs: [0x83, 0x84, 0x85], larvaBased: true }, // Zergling
+  0x26: { trainFrames: 480, sourceIDs: [0x83, 0x84, 0x85], larvaBased: true }, // Hydralisk
+  0x2b: { trainFrames: 720, sourceIDs: [0x83, 0x84, 0x85], larvaBased: true }, // Mutalisk
+  0x2f: { trainFrames: 480, sourceIDs: [0x83, 0x84, 0x85], larvaBased: true }, // Scourge
+  0x2d: { trainFrames: 720, sourceIDs: [0x83, 0x84, 0x85], larvaBased: true }, // Queen
+  0x2e: { trainFrames: 720, sourceIDs: [0x83, 0x84, 0x85], larvaBased: true }, // Defiler
+  0x27: { trainFrames: 840, sourceIDs: [0x83, 0x84, 0x85], larvaBased: true }, // Ultralisk
+  // Zerg unit-morphs: 1:1 from a single unit, no production-count scaling.
+  0x67: { trainFrames: 480, sourceIDs: [] },                             // Lurker
+  0x2c: { trainFrames: 480, sourceIDs: [] },                             // Guardian
+  0x3e: { trainFrames: 480, sourceIDs: [] },                             // Devourer
+};
+
+const TOWN_HALL_IDS = [0x6a, 0x9a, 0x83];
+const MIN_GAP_FRAMES = 12;  // ~0.5s floor — even a maxed-out economy can't produce same unit faster.
+
 export interface BuildOrderEvent {
   frame: number;
   seconds: number;
@@ -33,28 +100,26 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
 
   const fps = 1000 / 42;
 
-  // Debug: one-shot histogram of IneffKind values so we can verify the filter
-  // matches screp's output shape. Logs once per replay (not per command).
-  if (typeof console !== 'undefined' && !(replay as unknown as { __overmindDumpedIneff?: boolean }).__overmindDumpedIneff) {
-    const hist: Record<string, number> = {};
-    for (const c of cmds) {
-      const k = (c as { IneffKind?: unknown }).IneffKind;
-      const key = k === undefined ? '(undefined)' : typeof k === 'object' ? JSON.stringify(k) : String(k);
-      hist[key] = (hist[key] ?? 0) + 1;
+  // Per-player per-unit last-accepted-frame for the production-budget filter.
+  // Keyed by `${pid}::${unitId}`.
+  const lastAccepted = new Map<string, number>();
+  // Per-player count of started production structures (Build or BuildingMorph
+  // completion is ignored — queueing counts, which matches how players think
+  // about builds in progress). Keyed by `${pid}::${buildingID}`.
+  const buildingCounts = new Map<string, number>();
+  const bumpBuilding = (pid: number, buildingID: number) => {
+    const k = `${pid}::${buildingID}`;
+    buildingCounts.set(k, (buildingCounts.get(k) ?? 0) + 1);
+  };
+  const getBuilding = (pid: number, buildingID: number) => buildingCounts.get(`${pid}::${buildingID}`) ?? 0;
+  // Seed each player with 1 of every race's town hall. Cross-race seeds are
+  // harmless: you can only train units whose sourceIDs you actually match.
+  const seedPlayer = (pid: number) => {
+    for (const id of TOWN_HALL_IDS) {
+      const k = `${pid}::${id}`;
+      if (!buildingCounts.has(k)) buildingCounts.set(k, 1);
     }
-    // eslint-disable-next-line no-console
-    console.debug('[overmind] IneffKind histogram:', hist);
-    (replay as unknown as { __overmindDumpedIneff?: boolean }).__overmindDumpedIneff = true;
-  }
-
-  // Early-game dedupe: in the first ~1 second nobody has the resources to
-  // queue multiples of anything (you start with exactly one unit's worth of
-  // minerals), so repeated Train commands for the same player/unit inside
-  // that window are always mashing. Screp's IneffKind heuristic sometimes
-  // misses these because there's no prior "effective" command to compare
-  // against. Keyed by `${pid}::${unitId}`.
-  const EARLY_GAME_FRAMES = 48; // ~2s at 23.81 fps.
-  const earlySeen = new Set<string>();
+  };
 
   for (const c of cmds) {
     const tn = c.Type?.Name;
@@ -65,16 +130,29 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
     // phantom probes that were never actually trained.
     if (!isEffective(c)) continue;
 
-    if (c.Frame < EARLY_GAME_FRAMES && (tn === TYPE_NAMES.train || tn === TYPE_NAMES.unitMorph)) {
+    const pid = c.PlayerID;
+    seedPlayer(pid);
+
+    // Production-budget filter for Train / UnitMorph. Drop commands that
+    // fire faster than the known production rate for this unit.
+    if (tn === TYPE_NAMES.train || tn === TYPE_NAMES.unitMorph) {
       const u = cmdUnit(c);
       if (u) {
-        const key = `${c.PlayerID}::${u.ID}`;
-        if (earlySeen.has(key)) continue;
-        earlySeen.add(key);
+        const info = PRODUCTION_SOURCE[u.ID];
+        if (info) {
+          let slots = 0;
+          for (const sid of info.sourceIDs) slots += getBuilding(pid, sid);
+          if (info.larvaBased) slots *= 3;
+          const effective = Math.max(1, slots);
+          const minGap = Math.max(MIN_GAP_FRAMES, Math.floor(info.trainFrames / effective));
+          const key = `${pid}::${u.ID}`;
+          const prev = lastAccepted.get(key);
+          if (prev !== undefined && c.Frame - prev < minGap) continue;
+          lastAccepted.set(key, c.Frame);
+        }
       }
     }
 
-    const pid = c.PlayerID;
     const frame = c.Frame;
     const seconds = frame / fps;
     const supply = supplyByPID.get(pid) ?? 0;
@@ -106,6 +184,7 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
         const meta = u ? unitMeta(u.ID) : undefined;
         if (!meta) break;
         out.push({ frame, seconds, playerID: pid, kind: 'build', name: meta.name, supply, workers });
+        if (meta.isBuilding) bumpBuilding(pid, u!.ID);
         break;
       }
       case TYPE_NAMES.buildingMorph: {
@@ -113,6 +192,7 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
         const meta = u ? unitMeta(u.ID) : undefined;
         if (!meta) break;
         out.push({ frame, seconds, playerID: pid, kind: 'buildingMorph', name: meta.name, supply, workers });
+        if (meta.isBuilding) bumpBuilding(pid, u!.ID);
         break;
       }
       case TYPE_NAMES.tech: {

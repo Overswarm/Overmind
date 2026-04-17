@@ -1,14 +1,8 @@
-import { useMemo } from 'react';
 import { useAppStore } from '../state/store';
 import { cleanBwString, formatMMSS, frameToSeconds, raceLetter } from '../types/replay';
-import { cachedOpenings } from '../analysis/cache';
 
 export function MetadataHeader() {
   const active = useAppStore((s) => s.active);
-  const openings = useMemo(() => {
-    if (!active) return [];
-    return cachedOpenings(active.hash, active.replay);
-  }, [active]);
   if (!active) {
     return (
       <div className="flex h-14 items-center px-4 text-[var(--color-text-h)]">
@@ -47,18 +41,6 @@ export function MetadataHeader() {
           {matchup} · {duration}
           {h.StartTime ? ` · ${new Date(h.StartTime).toLocaleString()}` : ''}
           {winners}
-          {openings.length > 0 && (
-            <span className="ml-2">
-              · Opening:{' '}
-              {openings.map((o, i) => (
-                <span key={o.playerID} className={o.confidence === 'inferred' ? 'italic' : ''}>
-                  {i > 0 ? ', ' : ''}
-                  <span className="text-[var(--color-text-h)]">{o.label}</span>
-                  <span className="ml-1 font-mono text-[10px] uppercase">{o.race}</span>
-                </span>
-              ))}
-            </span>
-          )}
           {leaves.map((l, i) => (
             <span key={i} className="ml-2 text-[var(--color-muted)]">
               · {l.name} left {formatMMSS(l.seconds)}

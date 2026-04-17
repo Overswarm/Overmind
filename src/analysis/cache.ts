@@ -7,7 +7,6 @@ import type { ParsedReplay } from '../types/replay';
 import { computeBuildOrder, type BuildOrderEvent } from './buildOrder';
 import { computeTimeSeries, type DualTrackSeries } from './timeseries';
 import { computeSwingMarkers, type SwingMarker } from './swings';
-import { classifyOpenings, type OpeningLabel } from './openings';
 import { computeHeatmap, type HeatmapGrid, type HeatmapMode } from './heatmap';
 import { computeHotkeyStats, type HotkeyStats } from './hotkeys';
 
@@ -16,7 +15,6 @@ interface Entry {
   buildOrder?: BuildOrderEvent[];
   timeSeries?: DualTrackSeries;
   swings?: SwingMarker[];
-  openings?: OpeningLabel[];
   heatmaps?: Map<HeatmapMode, HeatmapGrid>;
   hotkeys?: HotkeyStats;
 }
@@ -47,12 +45,6 @@ export function cachedSwings(hash: string, replay: ParsedReplay): SwingMarker[] 
   const e = entryFor(hash);
   if (!e.swings) e.swings = computeSwingMarkers(cachedBuildOrder(hash, replay));
   return e.swings;
-}
-
-export function cachedOpenings(hash: string, replay: ParsedReplay): OpeningLabel[] {
-  const e = entryFor(hash);
-  if (!e.openings) e.openings = classifyOpenings(replay, cachedBuildOrder(hash, replay));
-  return e.openings;
 }
 
 export function cachedHotkeyStats(hash: string, replay: ParsedReplay): HotkeyStats {

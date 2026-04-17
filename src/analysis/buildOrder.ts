@@ -3,11 +3,12 @@
 // cumulative supply produced and worker count at the time of the event.
 //
 // Caveats:
-//   - "Supply" here is supply PRODUCED (not alive). BW's displayed supply
-//     decreases when units die; we don't have that signal without an engine
-//     simulation, so this is an approximation. Still close enough that the
-//     numbers match typical build-order notation (e.g. "9 Pool").
-//   - Worker count is total produced, not alive. Same caveat.
+//   - "Supply" here is supply PRODUCED (not alive), seeded with the 4 starting
+//     workers every BW player receives. BW's displayed supply decreases when
+//     units die; we don't have that signal without an engine simulation, so
+//     this is an approximation. Still close enough that the numbers match
+//     typical build-order notation (e.g. "9 Pool" fires at supply 9).
+//   - Worker count is total produced (seeded at 4), not alive. Same caveat.
 
 import type { ParsedReplay, ReplayCommand } from '../types/replay';
 import { cmdTechName, cmdUnit, cmdUpgradeName, isEffective, isType, TYPE_NAMES } from './commands';
@@ -91,12 +92,23 @@ export interface BuildOrderEvent {
   workers: number;              // Worker-type units produced by this player *before* this event
 }
 
+// Every BW player starts with 4 workers (SCVs / Probes / Drones), which means
+// the first build event observed should report supply 4, not 0. We seed the
+// cumulative counters per non-observer player at game start.
+const STARTING_WORKERS = 4;
+const STARTING_SUPPLY = 4;
+
 export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
   const cmds = replay.Commands?.Cmds;
   if (!cmds?.length) return [];
 
   const supplyByPID = new Map<number, number>();
   const workersByPID = new Map<number, number>();
+  for (const p of replay.Header?.Players ?? []) {
+    if (p.Observer) continue;
+    supplyByPID.set(p.ID, STARTING_SUPPLY);
+    workersByPID.set(p.ID, STARTING_WORKERS);
+  }
   const out: BuildOrderEvent[] = [];
 
   const fps = 1000 / 42;

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { listLibrary, getCachedReplay, touchLibraryEntry, type LibraryEntry } from '../storage/db';
+import { listLibrary, getCachedReplay, touchLibraryEntry, deleteLibraryEntry, type LibraryEntry } from '../storage/db';
 import { useAppStore } from '../state/store';
 import { cleanBwString, formatMMSS, frameToSeconds } from '../types/replay';
 
@@ -10,6 +10,7 @@ export function Library() {
   const entries = useLiveQuery(() => listLibrary(), [], []);
   const active = useAppStore((s) => s.active);
   const setActive = useAppStore((s) => s.setActive);
+  const clearActive = useAppStore((s) => s.clearActive);
   const setError = useAppStore((s) => s.setError);
 
   const [search, setSearch] = useState('');
@@ -24,6 +25,14 @@ export function Library() {
     }
     await touchLibraryEntry(hash);
     setActive({ hash, name, path, replay });
+  };
+
+  const onDelete = async (e: LibraryEntry, ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    const label = cleanBwString(e.mapName) || e.name;
+    if (!window.confirm(`Remove "${label}" from the library?`)) return;
+    if (active?.hash === e.hash) clearActive();
+    await deleteLibraryEntry(e.hash);
   };
 
   const matchups = useMemo(() => {
@@ -116,9 +125,9 @@ export function Library() {
           const isActive = active?.hash === e.hash;
           const dur = e.durationFrames ? formatMMSS(frameToSeconds(e.durationFrames)) : '—';
           return (
-            <li key={e.hash}>
+            <li key={e.hash} className="group relative">
               <button
-                className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                className={`w-full text-left px-3 py-2 pr-8 text-sm transition-colors ${
                   isActive ? 'bg-[color-mix(in_oklab,var(--color-accent)_18%,transparent)] text-[var(--color-text-h)]' : 'hover:bg-[var(--color-bg-elev)]'
                 }`}
                 onClick={() => onOpen(e.hash, e.name, e.path)}
@@ -140,6 +149,14 @@ export function Library() {
                   <span>{dur}</span>
                   <span className="truncate">{(e.players || []).map((p) => cleanBwString(p)).join(' vs ')}</span>
                 </div>
+              </button>
+              <button
+                onClick={(ev) => onDelete(e, ev)}
+                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded text-[var(--color-muted)] opacity-0 transition-opacity hover:bg-[var(--color-bg-elev)] hover:text-[var(--color-text-h)] focus:opacity-100 group-hover:opacity-100"
+                title="Remove from library"
+                aria-label={`Remove ${cleanBwString(e.mapName) || e.name}`}
+              >
+                ×
               </button>
             </li>
           );

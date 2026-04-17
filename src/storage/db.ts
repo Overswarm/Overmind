@@ -122,3 +122,10 @@ export async function getNotes(hash: string): Promise<string> {
 export async function setNotes(hash: string, notes: string): Promise<void> {
   await db.library.update(hash, { notes, notesUpdatedAt: Date.now() });
 }
+
+export async function deleteLibraryEntry(hash: string): Promise<void> {
+  await db.transaction('rw', db.library, db.parsed, async () => {
+    await db.library.delete(hash);
+    await db.parsed.delete(hash);
+  });
+}

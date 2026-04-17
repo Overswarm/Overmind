@@ -79,7 +79,10 @@ export function computeTimeSeries(
     cumSupply.set(e.playerID, (cumSupply.get(e.playerID) ?? 0) + meta.supply * count);
     s.supplyProduced[idx] = cumSupply.get(e.playerID)!;
 
-    if (meta.isArmy) {
+    // Army value: mobile, non-worker combat units only. Explicitly excludes
+    // defensive buildings like Photon Cannons, Sunkens, and Bunkers even if
+    // future table edits flag them as army — those belong in "spent" instead.
+    if (meta.isArmy && !meta.isBuilding && !meta.isWorker) {
       cumArmy.set(e.playerID, (cumArmy.get(e.playerID) ?? 0) + (meta.mineral + meta.gas) * count);
       s.armyValue[idx] = cumArmy.get(e.playerID)!;
     }

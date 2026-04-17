@@ -3,6 +3,7 @@ import { MetadataHeader } from './ui/MetadataHeader';
 import { Timeline } from './ui/Timeline';
 import { Library } from './ui/Library';
 import { DropZone } from './ui/DropZone';
+import { AnalysisView } from './ui/AnalysisView';
 import { DualTrackPanel } from './ui/panels/DualTrackPanel';
 import { BuildOrderPanel } from './ui/panels/BuildOrderPanel';
 import { RosterPanel } from './ui/panels/RosterPanel';
@@ -16,12 +17,14 @@ import { DebugPanel } from './ui/panels/DebugPanel';
 import { useAppStore } from './state/store';
 
 type RightPanel = 'heatmap' | 'hotkeys' | 'macro' | 'notes' | 'debug' | null;
+type View = 'replay' | 'analysis';
 
 function App() {
   const active = useAppStore((s) => s.active);
   const loading = useAppStore((s) => s.loading);
   const error = useAppStore((s) => s.error);
   const [rightPanel, setRightPanel] = useState<RightPanel>('heatmap');
+  const [view, setView] = useState<View>('replay');
 
   return (
     <div className="grid h-screen w-screen grid-rows-[auto_1fr_auto] bg-[var(--color-bg)]">
@@ -29,7 +32,23 @@ function App() {
         <div className="flex-1">
           <MetadataHeader />
         </div>
-        {active && (
+        <div className="flex items-stretch">
+          {(['replay', 'analysis'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`border-l border-[var(--color-border)] px-3 text-[10px] font-semibold uppercase tracking-wide ${
+                view === v
+                  ? 'bg-[var(--color-accent)] text-white'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
+              }`}
+              title={v === 'replay' ? 'Per-replay analysis' : 'Aggregate analysis across your library'}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        {active && view === 'replay' && (
           <div className="flex items-stretch">
             {(['heatmap', 'hotkeys', 'macro', 'notes', 'debug'] as const).map((key) => (
               <button
@@ -70,7 +89,9 @@ function App() {
         </aside>
 
         <section className="min-h-0 overflow-auto p-4">
-          {!active ? (
+          {view === 'analysis' ? (
+            <AnalysisView />
+          ) : !active ? (
             <div className="mx-auto max-w-2xl">
               <DropZone />
               {error && (
@@ -127,7 +148,7 @@ function App() {
       </main>
 
       <footer className="border-t border-[var(--color-border)] bg-[var(--color-bg-elev)]">
-        <Timeline />
+        {view === 'replay' && <Timeline />}
       </footer>
 
       {loading.busy && (

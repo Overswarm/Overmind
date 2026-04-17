@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useAppStore } from '../state/store';
 import { cleanBwString, formatMMSS, frameToSeconds, raceLetter } from '../types/replay';
 
 export function MetadataHeader() {
   const active = useAppStore((s) => s.active);
+  const [revealOutcome, setRevealOutcome] = useState(false);
   if (!active) {
     return (
       <div className="flex h-14 items-center px-4 text-[var(--color-text-h)]">
@@ -15,7 +17,6 @@ export function MetadataHeader() {
   const c = active.replay.Computed;
   const duration = formatMMSS(frameToSeconds(h.Frames));
   const matchup = deriveMatchup(active.replay);
-  const winners = c?.WinnerTeam ? ` · Team ${c.WinnerTeam} wins` : '';
 
   const mapTitle = cleanBwString(active.replay.MapData?.Name || h.Map) || active.name;
 
@@ -33,20 +34,57 @@ export function MetadataHeader() {
     })
     .sort((a, b) => a.seconds - b.seconds);
 
+  const winningTeam = c?.WinnerTeam;
+  const winnerNames = winningTeam
+    ? (h.Players || [])
+        .filter((p) => !p.Observer && p.Team === winningTeam)
+        .map((p) => cleanBwString(p.Name))
+    : [];
+  const hasOutcome = winnerNames.length > 0 || leaves.length > 0;
+
   return (
     <div className="flex h-14 items-center gap-4 px-4">
       <div className="min-w-0">
         <div className="truncate text-base font-semibold text-[var(--color-text-h)]">{mapTitle}</div>
-        <div className="truncate text-xs text-[var(--color-muted)]">
-          {matchup} · {duration}
-          {h.StartTime ? ` · ${new Date(h.StartTime).toLocaleString()}` : ''}
-          {winners}
-          {leaves.map((l, i) => (
-            <span key={i} className="ml-2 text-[var(--color-muted)]">
-              · {l.name} left {formatMMSS(l.seconds)}
-              {l.reason && l.reason !== 'Quit' ? ` (${l.reason})` : ''}
-            </span>
-          ))}
+        <div className="flex items-center gap-2 truncate text-xs text-[var(--color-muted)]">
+          <span>
+            {matchup} · {duration}
+            {h.StartTime ? ` · ${new Date(h.StartTime).toLocaleString()}` : ''}
+          </span>
+          {hasOutcome && (
+            <>
+              {!revealOutcome ? (
+                <button
+                  onClick={() => setRevealOutcome(true)}
+                  className="rounded border border-[var(--color-border)] px-1.5 py-[1px] text-[10px] uppercase tracking-wide hover:text-[var(--color-text-h)]"
+                  title="Show winner and leave times (spoilers)"
+                >
+                  Reveal outcome
+                </button>
+              ) : (
+                <span className="flex items-center gap-2">
+                  {winnerNames.length > 0 && (
+                    <span className="text-[var(--color-text-h)]">
+                      🏆 {winnerNames.join(' & ')}
+                    </span>
+                  )}
+                  {leaves.map((l, i) => (
+                    <span key={i}>
+                      · {l.name} left {formatMMSS(l.seconds)}
+                      {l.reason && l.reason !== 'Quit' ? ` (${l.reason})` : ''}
+                    </span>
+                  ))}
+                  <button
+                    onClick={() => setRevealOutcome(false)}
+                    className="ml-1 text-[var(--color-muted)] hover:text-[var(--color-text-h)]"
+                    title="Hide"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+            </>
+          )}
         </div>
       </div>
       <div className="ml-auto flex items-center gap-3 text-xs text-[var(--color-muted)]">

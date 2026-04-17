@@ -22,14 +22,30 @@ export function HeatmapPanel() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [mode, setMode] = useState<HeatmapMode>('all');
 
-  const { grid, players, startLocations } = useMemo(() => {
-    if (!active) return { grid: null, players: [], startLocations: [] };
+  const { grid, players, startLocations, minerals, geysers } = useMemo(() => {
+    if (!active) return { grid: null, players: [], startLocations: [], minerals: [], geysers: [] };
     const grid = cachedHeatmap(active.hash, active.replay, mode);
-    const players = (active.replay.Header?.Players ?? [])
-      .filter((p) => !p.Observer)
-      .map((p, i) => ({ id: p.ID, name: cleanBwString(p.Name), colorIdx: i }));
-    const startLocations = active.replay.MapData?.StartLocations ?? [];
-    return { grid, players, startLocations };
+    const nonObs = (active.replay.Header?.Players ?? []).filter((p) => !p.Observer);
+    const players = nonObs.map((p, i) => ({ id: p.ID, name: cleanBwString(p.Name), colorIdx: i }));
+    // Pair each start location with the player that spawned there. PlayerDescs
+    // is the source of truth for start-location ownership (keyed by PlayerID);
+    // fall back to unowned if we can't match.
+    const descs = active.replay.Computed?.PlayerDescs ?? [];
+    const startLocations = descs
+      .map((d) => {
+        const sl = d.StartLocation;
+        if (!sl) return null;
+        const idx = nonObs.findIndex((p) => p.ID === d.PlayerID);
+        return { X: sl.X, Y: sl.Y, colorIdx: idx >= 0 ? idx : -1 };
+      })
+      .filter((v): v is { X: number; Y: number; colorIdx: number } => v !== null);
+    const minerals = (active.replay.MapData?.MineralFields ?? [])
+      .map((m) => m.Point)
+      .filter((p): p is { X: number; Y: number } => !!p && typeof p.X === 'number' && typeof p.Y === 'number');
+    const geysers = (active.replay.MapData?.Geysers ?? [])
+      .map((g) => g.Point)
+      .filter((p): p is { X: number; Y: number } => !!p && typeof p.X === 'number' && typeof p.Y === 'number');
+    return { grid, players, startLocations, minerals, geysers };
   }, [active, mode]);
 
   useEffect(() => {
@@ -89,18 +105,47 @@ export function HeatmapPanel() {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
 
-    // Mark start locations with small rings colored by slot order.
-    for (const sl of startLocations) {
-      if (!sl.Point) continue;
-      const cx = (sl.Point.X / mapPixelsX) * canvas.width;
-      const cy = (sl.Point.Y / mapPixelsY) * canvas.height;
+    const toCanvas = (pt: { X: number; Y: number }) => ({
+      x: (pt.X / mapPixelsX) * canvas.width,
+      y: (pt.Y / mapPixelsY) * canvas.height,
+    });
+
+    // Mineral fields: small cyan squares. Drawn before start rings so rings
+    // sit on top if a base overlaps its minerals.
+    ctx.fillStyle = 'rgba(125, 211, 252, 0.8)';
+    for (const m of minerals) {
+      const { x, y } = toCanvas(m);
+      const s = 2 * devicePixelRatio;
+      ctx.fillRect(x - s, y - s, s * 2, s * 2);
+    }
+    // Geysers: slightly larger green diamonds.
+    ctx.fillStyle = 'rgba(74, 222, 128, 0.9)';
+    for (const g of geysers) {
+      const { x, y } = toCanvas(g);
+      const s = 3 * devicePixelRatio;
       ctx.beginPath();
-      ctx.arc(cx, cy, 6 * devicePixelRatio, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-      ctx.lineWidth = 1.5 * devicePixelRatio;
+      ctx.moveTo(x, y - s);
+      ctx.lineTo(x + s, y);
+      ctx.lineTo(x, y + s);
+      ctx.lineTo(x - s, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Start locations: ring colored by the player spawning there so you can
+    // see which side the hotspots belong to. Unowned fallback renders white.
+    for (const sl of startLocations) {
+      const { x, y } = toCanvas(sl);
+      const color =
+        sl.colorIdx >= 0
+          ? PLAYER_COLORS[sl.colorIdx % PLAYER_COLORS.length]
+          : [255, 255, 255];
+      ctx.beginPath();
+      ctx.arc(x, y, 7 * devicePixelRatio, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${color.join(',')},0.9)`;
+      ctx.lineWidth = 2 * devicePixelRatio;
       ctx.stroke();
     }
-  }, [grid, players, startLocations]);
+  }, [grid, players, startLocations, minerals, geysers]);
 
   if (!active) return null;
 

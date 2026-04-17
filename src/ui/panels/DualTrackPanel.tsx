@@ -5,11 +5,12 @@ import { cachedTimeSeries } from '../../analysis/cache';
 import { cleanBwString, FRAMES_PER_SECOND, formatMMSS } from '../../types/replay';
 import { UPlotChart } from '../UPlotChart';
 
-type Metric = 'workersProduced' | 'supplyProduced' | 'armyValue' | 'spent' | 'apm' | 'eapm';
+type Metric = 'workersProduced' | 'supplyProduced' | 'supplyCap' | 'armyValue' | 'spent' | 'apm' | 'eapm';
 
 const METRIC_LABELS: Record<Metric, string> = {
   workersProduced: 'Workers produced',
   supplyProduced: 'Supply produced',
+  supplyCap: 'Supply cap',
   armyValue: 'Army value (min+gas)',
   spent: 'Total resources spent (min+gas)',
   apm: 'APM (rolling 30s)',

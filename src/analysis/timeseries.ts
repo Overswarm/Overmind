@@ -17,12 +17,39 @@ import { unitMeta } from './units';
 // the frame-by-frame noise that makes raw commands-per-second unreadable.
 const APM_WINDOW_SECONDS = 30;
 
+// Supply cap from each provider (display units). Lair/Hive aren't here: the
+// base Hatchery already counts and those morphs don't add more.
+const CAP_PROVIDER_SUPPLY: Record<number, number> = {
+  0x6a: 10, // Command Center
+  0x6d: 8,  // Supply Depot
+  0x9a: 9,  // Nexus
+  0x9c: 8,  // Pylon
+  0x83: 1,  // Hatchery
+  0x2a: 8,  // Overlord (morphs from a Drone → shows up as a Train/Morph event)
+};
+
+// Construction / morph completion times in frames. Approximations good to
+// ~1 second.
+const CAP_PROVIDER_COMPLETION_FRAMES: Record<number, number> = {
+  0x6a: 1800,
+  0x6d: 960,
+  0x9a: 1800,
+  0x9c: 450,
+  0x83: 1800,
+  0x2a: 600,
+};
+
+// Everyone effectively starts at 9: Terran/Protoss from their CC/Nexus, Zerg
+// from 1 (Hatch) + 8 (preplaced Overlord). Close enough for a chart.
+const STARTING_SUPPLY_CAP = 9;
+
 export interface PlayerSeries {
   playerID: number;
   name: string;
   // All arrays share the length of `timeSeconds` (the x axis).
   workersProduced: number[];
   supplyProduced: number[];
+  supplyCap: number[];          // Supply cap from completed halls / depots / pylons / overlords / hatches
   armyValue: number[];          // Mineral + gas spent on non-building army units
   spent: number[];              // Cumulative mineral + gas committed to all units and buildings
   apm: number[];                // Rolling actions-per-minute (all commands)
@@ -55,6 +82,7 @@ export function computeTimeSeries(
       name: p.Name,
       workersProduced: new Array(xs.length).fill(0),
       supplyProduced: new Array(xs.length).fill(0),
+      supplyCap: new Array(xs.length).fill(STARTING_SUPPLY_CAP),
       armyValue: new Array(xs.length).fill(0),
       spent: new Array(xs.length).fill(0),
       apm: new Array(xs.length).fill(0),
@@ -102,11 +130,31 @@ export function computeTimeSeries(
     }
   }
 
+  // Supply cap: walk events a second time and bump cap at each provider's
+  // completion frame. Done separately from the main loop so completion-offset
+  // writes don't interleave with per-event production writes.
+  for (const e of events) {
+    if (e.unitID === undefined) continue;
+    const cap = CAP_PROVIDER_SUPPLY[e.unitID];
+    if (!cap) continue;
+    const isBuilding = e.kind === 'build' || e.kind === 'buildingMorph';
+    const isOverlord = (e.kind === 'train' || e.kind === 'morph') && e.unitID === 0x2a;
+    if (!isBuilding && !isOverlord) continue;
+    const s = seriesByPID.get(e.playerID);
+    if (!s) continue;
+    const completionFrame = e.frame + (CAP_PROVIDER_COMPLETION_FRAMES[e.unitID] ?? 0);
+    const completionSec = completionFrame / fps;
+    if (completionSec > totalSeconds) continue;
+    const idx = Math.min(xs.length - 1, Math.floor(completionSec / stepSeconds));
+    for (let i = idx; i < xs.length; i++) s.supplyCap[i] += cap;
+  }
+
   for (const s of seriesByPID.values()) {
     ffill(s.workersProduced);
     ffill(s.supplyProduced);
     ffill(s.armyValue);
     ffill(s.spent);
+    // supplyCap is already monotonic via direct writes, no ffill needed.
   }
 
   // APM / EAPM: scan the raw command array once, bucket per-player per-second

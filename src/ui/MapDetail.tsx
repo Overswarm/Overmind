@@ -109,13 +109,13 @@ export function MapDetail({
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+        <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
             Matchup distribution
           </div>
           <DistributionList rows={Object.entries(stats.matchups).map(([k, v]) => ({ k, v }))} />
         </div>
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+        <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
             By race on this map
           </div>
@@ -143,7 +143,7 @@ export function MapDetail({
         </div>
       </div>
 
-      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+      <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
           Common tech per race (% of games that built it)
         </div>
@@ -178,7 +178,7 @@ export function MapDetail({
         </div>
       </div>
 
-      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
+      <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
         <div className="border-b border-[var(--color-border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
           Games on {mapName}
         </div>
@@ -220,7 +220,7 @@ export function MapDetail({
 
 function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+    <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
       <div className="text-[10px] uppercase tracking-wide text-[var(--color-muted)]">{label}</div>
       <div className="mt-1 font-mono text-2xl tabular-nums text-[var(--color-text-h)]">{value}</div>
       {sub && <div className="text-[10px] text-[var(--color-muted)]">{sub}</div>}

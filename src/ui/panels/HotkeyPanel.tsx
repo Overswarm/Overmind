@@ -17,7 +17,7 @@ export function HotkeyPanel() {
   for (const p of active.replay.Header?.Players ?? []) playerNames[p.ID] = cleanBwString(p.Name);
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
+    <div className="theme-panel flex h-full flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
       <div className="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         <span>Hotkeys · Control Groups</span>
       </div>

@@ -9,12 +9,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getCachedReplay, listLibrary, type LibraryEntry } from '../storage/db';
 import { digestReplay, type ReplayDigest } from '../analysis/aggregate';
-import { computeFunStats, formatHoursMinutes, type FunStats } from '../analysis/funStats';
+import {
+  computeFunStats,
+  formatHoursMinutes,
+  renderFunStatsMarkdown,
+  type FunStats,
+} from '../analysis/funStats';
 import { useSettingsStore } from '../state/settings';
 
 export function StatsView() {
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [digests, setDigests] = useState<ReplayDigest[]>([]);
+  const [missingParse, setMissingParse] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filterMyRace, setFilterMyRace] = useState<string | null>(null);
   const [filterOppRace, setFilterOppRace] = useState<string | null>(null);
@@ -32,10 +38,14 @@ export function StatsView() {
       if (cancelled) return;
       setEntries(lib);
       const out: ReplayDigest[] = [];
+      let missing = 0;
       for (const e of lib) {
         try {
           const parsed = await getCachedReplay(e.hash);
-          if (!parsed) continue;
+          if (!parsed) {
+            missing += 1;
+            continue;
+          }
           out.push(digestReplay(e, parsed, identities));
         } catch (err) {
           console.warn('[stats] failed to digest', e.hash, err);
@@ -43,6 +53,7 @@ export function StatsView() {
       }
       if (cancelled) return;
       setDigests(out);
+      setMissingParse(missing);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -68,6 +79,14 @@ export function StatsView() {
   }, [meGames, filterMyRace, filterOppRace, filterMap]);
 
   const stats = useMemo(() => computeFunStats(filtered), [filtered]);
+
+  const exportMarkdown = () => {
+    const text = renderFunStatsMarkdown(stats);
+    downloadBlob('overmind-stats.md', text, 'text/markdown');
+  };
+  const exportJson = () => {
+    downloadBlob('overmind-stats.json', JSON.stringify(stats, null, 2), 'application/json');
+  };
 
   const myRaces = useMemo(() => {
     const r = new Set<string>();
@@ -97,7 +116,7 @@ export function StatsView() {
     return (
       <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm text-[var(--color-text-h)]">
         <div className="text-lg font-semibold">Fun stats</div>
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-4 text-xs text-[var(--color-muted)]">
+        <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-4 text-xs text-[var(--color-muted)]">
           Add your in-game name below to start tracking records, career totals,
           and per-matchup habits. Without a name we'd count every Terran's tanks,
           every Protoss's probes, etc.
@@ -118,7 +137,35 @@ export function StatsView() {
         <div className="text-xs text-[var(--color-muted)]">
           {loading
             ? 'Loading…'
-            : `${filtered.length} of ${meGames.length} your games · ${entries.length} total in library`}
+            : `${filtered.length} of ${meGames.length} your games · ${entries.length} total in library${
+                missingParse > 0 ? ` · ${missingParse} missing parse` : ''
+              }`}
+        </div>
+        {missingParse > 0 && !loading && (
+          <div
+            className="text-[10px] text-[var(--color-muted)]"
+            title="These replays are in the library but their parse cache has been evicted. Open each once from the Library to re-cache it."
+          >
+            (open them from the Library to include them)
+          </div>
+        )}
+        <div className="ml-auto flex gap-2">
+          <button
+            onClick={exportMarkdown}
+            disabled={filtered.length === 0}
+            className="rounded bg-[var(--color-accent)] px-3 py-1 text-xs font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            title="Download a markdown stats profile for sharing or LLM review"
+          >
+            Export markdown
+          </button>
+          <button
+            onClick={exportJson}
+            disabled={filtered.length === 0}
+            className="rounded border border-[var(--color-border)] px-3 py-1 text-xs font-medium text-[var(--color-text-h)] hover:bg-[var(--color-bg-elev)] disabled:cursor-not-allowed disabled:opacity-40"
+            title="Download the raw computed stats as JSON"
+          >
+            Export JSON
+          </button>
         </div>
       </div>
 
@@ -133,7 +180,7 @@ export function StatsView() {
       <FilterBar label="Map" options={maps} value={filterMap} onChange={setFilterMap} />
 
       {filtered.length === 0 ? (
-        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-4 text-xs text-[var(--color-muted)]">
+        <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-4 text-xs text-[var(--color-muted)]">
           {meGames.length === 0
             ? 'No replays with your name yet. Import some games or check that your identity tag matches how your name appears in-game.'
             : 'No games match those filters.'}
@@ -186,7 +233,7 @@ function CareerCard({ stats }: { stats: FunStats }) {
 function RecordsCard({ stats }: { stats: FunStats }) {
   if (stats.records.length === 0) return null;
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+    <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         Records
       </div>
@@ -231,7 +278,7 @@ function ByRaceSection({ stats }: { stats: FunStats }) {
         return (
           <div
             key={race}
-            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3"
+            className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3"
           >
             <div className="mb-2 flex items-baseline justify-between gap-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
@@ -286,7 +333,7 @@ function ByRaceSection({ stats }: { stats: FunStats }) {
 function TopOpponentsCard({ stats }: { stats: FunStats }) {
   if (stats.topOpponents.length === 0) return null;
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+    <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         Top opponents
       </div>
@@ -323,7 +370,7 @@ function TopOpponentsCard({ stats }: { stats: FunStats }) {
 function TopMapsCard({ stats }: { stats: FunStats }) {
   if (stats.topMaps.length === 0) return null;
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+    <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         Top maps
       </div>
@@ -359,7 +406,7 @@ function LengthBucketsCard({ stats }: { stats: FunStats }) {
   if (stats.lengthBuckets.length === 0) return null;
   const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+    <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         Game length by matchup
       </div>
@@ -392,7 +439,7 @@ function LengthBucketsCard({ stats }: { stats: FunStats }) {
 function OpeningsCard({ stats }: { stats: FunStats }) {
   if (stats.openings.length === 0) return null;
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+    <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         Favorite opening
       </div>
@@ -539,4 +586,14 @@ function IdentityBar({
       )}
     </div>
   );
+}
+
+function downloadBlob(filename: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
 }

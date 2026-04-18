@@ -18,6 +18,10 @@ import { useAppStore } from '../state/store';
 export interface IngestProgress {
   done: number;
   total: number;
+  // Display name of the file currently being parsed (or last completed if we've
+  // finished the batch). Makes slow imports feel alive — the user can see
+  // progress move through the folder rather than staring at a bare "5 / 200".
+  current?: string;
 }
 
 export interface UseIngest {
@@ -49,19 +53,20 @@ export function useIngest(): UseIngest {
         return;
       }
 
-      setProgress({ done: 0, total: entries.length });
+      setProgress({ done: 0, total: entries.length, current: entries[0]?.file.name });
       setLoading(true, `Parsing ${entries.length} replay${entries.length === 1 ? '' : 's'}`);
       try {
         let last: Awaited<ReturnType<typeof ingestFile>> | null = null;
         for (let i = 0; i < entries.length; i++) {
           const { file, path } = entries[i];
+          setProgress({ done: i, total: entries.length, current: file.name });
           try {
             const bytes = await readFileBytes(file);
             last = await ingestFile({ name: file.name, path, bytes });
           } catch (err) {
             console.warn(`Failed to parse ${path}:`, err);
           }
-          setProgress({ done: i + 1, total: entries.length });
+          setProgress({ done: i + 1, total: entries.length, current: file.name });
         }
         if (last) {
           setActive({ hash: last.hash, name: last.name, path: last.path, replay: last.replay });

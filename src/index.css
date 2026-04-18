@@ -111,3 +111,60 @@ body,
 ::selection {
   background: color-mix(in oklab, var(--color-accent) 40%, transparent);
 }
+
+/* Race-feel panel decoration. Applied alongside existing tailwind classes on
+ * every major panel card. Default theme is a no-op (keeps the clean slate
+ * look); per-theme variants layer a subtle box-shadow + optional background
+ * gradient so panels carry a Terran / Protoss / Zerg vibe without drowning
+ * out the data. Uses pure shadows + background-image so hit-testing and
+ * stacking are untouched (no pseudo-elements). */
+.theme-panel {
+  background-image: none;
+  box-shadow: none;
+  transition:
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+/* Terran: riveted steel bevel. Top highlight + bottom inner shadow give a
+ * pressed-metal feel; a faint top-down gradient suggests brushed panel. */
+:root[data-theme='terran'] .theme-panel {
+  border-color: #24374d;
+  background-image: linear-gradient(
+    180deg,
+    rgba(96, 165, 250, 0.05) 0%,
+    rgba(0, 0, 0, 0) 40%,
+    rgba(0, 0, 0, 0.15) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(147, 197, 253, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Protoss: gold-edged khaydarin crystal. Warm outer glow + corner shimmer. */
+:root[data-theme='protoss'] .theme-panel {
+  border-color: #5a4420;
+  background-image: linear-gradient(
+    135deg,
+    rgba(234, 179, 8, 0.06) 0%,
+    rgba(234, 179, 8, 0) 45%
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(234, 179, 8, 0.1),
+    0 0 0 1px rgba(234, 179, 8, 0.05),
+    0 6px 16px -8px rgba(234, 179, 8, 0.25);
+}
+
+/* Zerg: creep-warm radial. Purple outer glow + bottom-corner biomass bloom. */
+:root[data-theme='zerg'] .theme-panel {
+  border-color: #3a1e49;
+  background-image: radial-gradient(
+    120% 80% at 100% 100%,
+    rgba(192, 132, 252, 0.09) 0%,
+    rgba(192, 132, 252, 0) 55%
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(192, 132, 252, 0.08),
+    0 8px 20px -10px rgba(192, 132, 252, 0.35);
+}

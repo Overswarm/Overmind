@@ -23,7 +23,7 @@ export function TimingsCard({ agg }: { agg: Aggregate }) {
   const showMeVsOpp = agg.me.games > 0;
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+    <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         Avg macro timings
       </div>

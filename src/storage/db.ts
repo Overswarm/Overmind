@@ -30,6 +30,9 @@ export interface LibraryEntry {
   // User-authored notes. Typed in the Notes panel and persisted on change.
   notes?: string;
   notesUpdatedAt?: number;
+
+  // Pinned favorite — surfaced at the top of the library.
+  favorite?: boolean;
 }
 
 export interface ParsedEntry {
@@ -57,6 +60,12 @@ db.version(1).stores({
 // later. No data migration needed — Dexie carries forward existing rows.
 db.version(2).stores({
   library: 'hash, addedAt, lastOpenedAt, mapName, matchup, startTime, notesUpdatedAt',
+});
+// v3: index favorite so sorting pinned-first stays fast even for big libraries.
+// No data migration needed; existing rows read as `undefined` (falsy).
+db.version(3).stores({
+  library:
+    'hash, addedAt, lastOpenedAt, mapName, matchup, startTime, notesUpdatedAt, favorite',
 });
 
 export async function sha256Hex(bytes: ArrayBuffer | Uint8Array): Promise<string> {
@@ -121,6 +130,10 @@ export async function getNotes(hash: string): Promise<string> {
 
 export async function setNotes(hash: string, notes: string): Promise<void> {
   await db.library.update(hash, { notes, notesUpdatedAt: Date.now() });
+}
+
+export async function setFavorite(hash: string, favorite: boolean): Promise<void> {
+  await db.library.update(hash, { favorite });
 }
 
 export async function deleteLibraryEntry(hash: string): Promise<void> {

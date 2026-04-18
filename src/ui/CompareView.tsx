@@ -41,7 +41,7 @@ export function CompareView({
         {digests.map((d) => (
           <div
             key={d.hash}
-            className="flex w-80 flex-shrink-0 flex-col gap-2 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3"
+            className="theme-panel flex w-80 flex-shrink-0 flex-col gap-2 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3"
           >
             <div className="truncate text-sm font-semibold" title={d.mapName}>
               {d.mapName ?? d.name}

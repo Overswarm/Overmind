@@ -168,7 +168,7 @@ export function TrendChart({ digests, hasIdentities }: { digests: ReplayDigest[]
   }, [ordered, hasIdentities, theme]);
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+    <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
       <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         <span>
           {hasIdentities

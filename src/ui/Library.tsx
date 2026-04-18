@@ -1,12 +1,19 @@
 import { useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { listLibrary, getCachedReplay, touchLibraryEntry, deleteLibraryEntry, type LibraryEntry } from '../storage/db';
+import {
+  listLibrary,
+  getCachedReplay,
+  touchLibraryEntry,
+  deleteLibraryEntry,
+  setFavorite,
+  type LibraryEntry,
+} from '../storage/db';
 import { useAppStore } from '../state/store';
 import { cleanBwString, formatMMSS, frameToSeconds } from '../types/replay';
 import { useIngest } from '../storage/useIngest';
 import { supportsFolderPicker } from '../storage/ingest';
 
-type SortKey = 'recent' | 'longest' | 'map' | 'annotated';
+type SortKey = 'recent' | 'longest' | 'map' | 'annotated' | 'favorites';
 
 export function Library() {
   const entries = useLiveQuery(() => listLibrary(), [], []);
@@ -20,7 +27,7 @@ export function Library() {
   const [sort, setSort] = useState<SortKey>('recent');
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { onDrop, onPickFiles, onPickFolder } = useIngest();
+  const { progress, onDrop, onPickFiles, onPickFolder } = useIngest();
 
   const onOpen = async (hash: string, name: string, path: string | undefined) => {
     const replay = await getCachedReplay(hash);
@@ -38,6 +45,11 @@ export function Library() {
     if (!window.confirm(`Remove "${label}" from the library?`)) return;
     if (active?.hash === e.hash) clearActive();
     await deleteLibraryEntry(e.hash);
+  };
+
+  const onToggleFavorite = async (e: LibraryEntry, ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    await setFavorite(e.hash, !e.favorite);
   };
 
   const matchups = useMemo(() => {
@@ -59,8 +71,18 @@ export function Library() {
     }
     if (matchup) list = list.filter((e) => e.matchup === matchup);
     const sorted = [...list];
+    const byRecency = (a: LibraryEntry, b: LibraryEntry) =>
+      (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt);
     if (sort === 'recent') {
-      sorted.sort((a, b) => (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt));
+      // Pinned replays always surface at the top of Recent — it's the default
+      // sort, so this makes the favorite feature visible without requiring a
+      // re-sort. Within each group, we fall back to recency.
+      sorted.sort((a, b) => {
+        const af = a.favorite ? 1 : 0;
+        const bf = b.favorite ? 1 : 0;
+        if (af !== bf) return bf - af;
+        return byRecency(a, b);
+      });
     } else if (sort === 'longest') {
       sorted.sort((a, b) => (b.durationFrames ?? 0) - (a.durationFrames ?? 0));
     } else if (sort === 'annotated') {
@@ -69,8 +91,11 @@ export function Library() {
         const an = a.notes && a.notes.trim() ? (a.notesUpdatedAt ?? 0) : -1;
         const bn = b.notes && b.notes.trim() ? (b.notesUpdatedAt ?? 0) : -1;
         if (an !== bn) return bn - an;
-        return (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt);
+        return byRecency(a, b);
       });
+    } else if (sort === 'favorites') {
+      // Pinned only, newest first. Non-favorites are dropped from the view.
+      return sorted.filter((e) => e.favorite).sort(byRecency);
     } else {
       sorted.sort((a, b) =>
         (cleanBwString(a.mapName || a.name)).localeCompare(cleanBwString(b.mapName || b.name))
@@ -165,6 +190,7 @@ export function Library() {
             className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1 py-0.5 text-[10px]"
           >
             <option value="recent">Recent</option>
+            <option value="favorites">Favorites</option>
             <option value="longest">Longest</option>
             <option value="annotated">Annotated</option>
             <option value="map">Map A–Z</option>
@@ -174,6 +200,21 @@ export function Library() {
         <div className="text-[10px] text-[var(--color-muted)]">
           {filtered.length} / {entries.length}
         </div>
+        {progress && (
+          <div className="flex flex-col gap-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-[10px] text-[var(--color-muted)]">
+            <div className="flex items-center justify-between">
+              <span>Importing…</span>
+              <span className="font-mono tabular-nums">
+                {progress.done} / {progress.total}
+              </span>
+            </div>
+            {progress.current && (
+              <div className="truncate font-mono" title={progress.current}>
+                {progress.current}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <ul className="flex-1 overflow-y-auto divide-y divide-[var(--color-border)]">
         {filtered.map((e) => {
@@ -182,19 +223,28 @@ export function Library() {
           return (
             <li key={e.hash} className="group relative">
               <button
-                className={`w-full text-left px-3 py-2 pr-8 text-sm transition-colors ${
+                className={`w-full text-left px-3 py-2 pr-14 text-sm transition-colors ${
                   isActive ? 'bg-[color-mix(in_oklab,var(--color-accent)_18%,transparent)] text-[var(--color-text-h)]' : 'hover:bg-[var(--color-bg-elev)]'
                 }`}
                 onClick={() => onOpen(e.hash, e.name, e.path)}
               >
                 <div className="flex items-center gap-1.5 truncate font-medium text-[var(--color-text-h)]">
-                  {e.notes && e.notes.trim() && (
+                  {e.favorite && (
                     <span
                       className="text-[var(--color-accent)]"
+                      title="Favorite"
+                      aria-label="Favorite"
+                    >
+                      ★
+                    </span>
+                  )}
+                  {e.notes && e.notes.trim() && (
+                    <span
+                      className="text-[var(--color-muted)]"
                       title="Has notes"
                       aria-label="Has notes"
                     >
-                      ★
+                      ✎
                     </span>
                   )}
                   <span className="truncate">{cleanBwString(e.mapName) || e.name}</span>
@@ -204,6 +254,19 @@ export function Library() {
                   <span>{dur}</span>
                   <span className="truncate">{(e.players || []).map((p) => cleanBwString(p)).join(' vs ')}</span>
                 </div>
+              </button>
+              <button
+                onClick={(ev) => onToggleFavorite(e, ev)}
+                className={`absolute right-7 top-1 flex h-5 w-5 items-center justify-center rounded transition-opacity hover:bg-[var(--color-bg-elev)] focus:opacity-100 ${
+                  e.favorite
+                    ? 'text-[var(--color-accent)] opacity-100'
+                    : 'text-[var(--color-muted)] opacity-0 hover:text-[var(--color-text-h)] group-hover:opacity-100'
+                }`}
+                title={e.favorite ? 'Unpin from favorites' : 'Pin as favorite'}
+                aria-label={e.favorite ? 'Unpin' : 'Pin as favorite'}
+                aria-pressed={!!e.favorite}
+              >
+                {e.favorite ? '★' : '☆'}
               </button>
               <button
                 onClick={(ev) => onDelete(e, ev)}

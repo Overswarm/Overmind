@@ -332,3 +332,109 @@ export function formatHoursMinutes(seconds: number): string {
   if (h === 0) return `${m}m`;
   return `${h}h ${m}m`;
 }
+
+// Markdown renderer for the fun stats. Kept in this file (not llmExport.ts)
+// because the Stats tab has a distinct audience: a personal profile with
+// records / records / habits, not per-replay drilldowns.
+export function renderFunStatsMarkdown(stats: FunStats): string {
+  const lines: string[] = [];
+  const decided = stats.wins + stats.losses;
+  const wr = decided > 0 ? Math.round((stats.wins / decided) * 100) : null;
+  lines.push('# Overmind stats profile');
+  lines.push('');
+  lines.push('## Career');
+  lines.push(`- Games: **${stats.games}**`);
+  lines.push(
+    `- Record: **${stats.wins}-${stats.losses}${stats.unknown > 0 ? `-${stats.unknown}` : ''}**${
+      wr != null ? ` (${wr}% WR)` : ''
+    }`,
+  );
+  lines.push(`- Time played: **${formatHoursMinutes(stats.totalSeconds)}**`);
+  lines.push(`- Best win streak: **${stats.longestWinStreak}**`);
+  lines.push(`- Worst loss streak: **${stats.longestLossStreak}**`);
+  lines.push('');
+
+  if (stats.records.length > 0) {
+    lines.push('## Records');
+    for (const r of stats.records) {
+      lines.push(`- **${r.label}**: ${r.value}${r.detail ? ` — _${r.detail}_` : ''}`);
+    }
+    lines.push('');
+  }
+
+  const raceEntries = Object.entries(stats.byMyRace).sort((a, b) => b[1].games - a[1].games);
+  if (raceEntries.length > 0) {
+    lines.push('## By my race');
+    for (const [race, v] of raceEntries) {
+      const rd = v.wins + v.losses;
+      const rwr = rd > 0 ? Math.round((v.wins / rd) * 100) : null;
+      lines.push(
+        `### As ${race} (${v.games} games, ${v.wins}-${v.losses}${rwr != null ? `, ${rwr}% WR` : ''})`,
+      );
+      lines.push(`- Workers trained: ${v.workers}`);
+      const topUnits = Object.entries(v.unitsProduced)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
+      if (topUnits.length > 0) {
+        lines.push('- Top units:');
+        for (const [u, n] of topUnits) lines.push(`  - ${u}: ${n}`);
+      }
+      const topBuildings = Object.entries(v.buildingsProduced)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8);
+      if (topBuildings.length > 0) {
+        lines.push('- Top buildings:');
+        for (const [b, n] of topBuildings) lines.push(`  - ${b}: ${n}`);
+      }
+      lines.push('');
+    }
+  }
+
+  if (stats.topOpponents.length > 0) {
+    lines.push('## Top opponents');
+    lines.push('| Name | Race | Games | W-L | WR |');
+    lines.push('|---|---|---:|---:|---:|');
+    for (const o of stats.topOpponents) {
+      const od = o.wins + o.losses;
+      const owr = od > 0 ? `${Math.round((o.wins / od) * 100)}%` : '—';
+      lines.push(`| ${o.name} | ${o.race} | ${o.games} | ${o.wins}-${o.losses} | ${owr} |`);
+    }
+    lines.push('');
+  }
+
+  if (stats.topMaps.length > 0) {
+    lines.push('## Top maps');
+    lines.push('| Map | Games | W-L | WR |');
+    lines.push('|---|---:|---:|---:|');
+    for (const m of stats.topMaps) {
+      const md = m.wins + m.losses;
+      const mwr = md > 0 ? `${Math.round((m.wins / md) * 100)}%` : '—';
+      lines.push(`| ${m.name} | ${m.games} | ${m.wins}-${m.losses} | ${mwr} |`);
+    }
+    lines.push('');
+  }
+
+  if (stats.lengthBuckets.length > 0) {
+    lines.push('## Game length by matchup');
+    lines.push('| Matchup | Games | ≥15m | ≥20m | ≥30m |');
+    lines.push('|---|---:|---:|---:|---:|');
+    for (const r of stats.lengthBuckets) {
+      const p = (n: number) => (r.games > 0 ? `${Math.round((n / r.games) * 100)}%` : '0%');
+      lines.push(`| ${r.matchup} | ${r.games} | ${p(r.over15)} | ${p(r.over20)} | ${p(r.over30)} |`);
+    }
+    lines.push('');
+  }
+
+  if (stats.openings.length > 0) {
+    lines.push('## Favorite openings');
+    lines.push('| Matchup | Opening | Used |');
+    lines.push('|---|---|---:|');
+    for (const o of stats.openings) {
+      const pct = Math.round((o.count / Math.max(1, o.games)) * 100);
+      lines.push(`| ${o.matchup} | ${o.opening} | ${o.count}/${o.games} (${pct}%) |`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}

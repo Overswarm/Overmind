@@ -53,8 +53,15 @@ export function DropZone() {
         onChange={onPickFiles}
       />
       {progress && (
-        <div className="mt-4 text-xs text-[var(--color-muted)]">
-          {progress.done} / {progress.total} processed
+        <div className="mt-4 flex flex-col items-center gap-1 text-xs text-[var(--color-muted)]">
+          <div>
+            {progress.done} / {progress.total} processed
+          </div>
+          {progress.current && (
+            <div className="max-w-xs truncate font-mono text-[10px]" title={progress.current}>
+              {progress.current}
+            </div>
+          )}
         </div>
       )}
     </div>

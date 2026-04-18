@@ -108,7 +108,7 @@ export function BuildOrderPanel() {
   };
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
+    <div className="theme-panel flex h-full flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
       <div className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">

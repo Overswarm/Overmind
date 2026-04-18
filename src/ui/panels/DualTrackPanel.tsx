@@ -133,7 +133,7 @@ export function DualTrackPanel() {
   if (!active) return null;
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
+    <div className="theme-panel flex h-full flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
       <div className="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2">
         <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
           Dual-track timeline

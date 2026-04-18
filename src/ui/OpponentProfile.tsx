@@ -42,7 +42,7 @@ export function OpponentProfile({ digests }: { digests: ReplayDigest[] }) {
   const sorted = [...opponents].sort((a, b) => b.games - a.games);
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
+    <div className="theme-panel rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
       <div className="mb-2 flex items-baseline justify-between">
         <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
           Recurring opponents ({sorted.length})

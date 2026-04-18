@@ -3,6 +3,9 @@ import { db, getCachedReplay, listLibrary, type LibraryEntry } from '../storage/
 import { formatMMSS } from '../types/replay';
 import { aggregateDigests, digestReplay, type ReplayDigest } from '../analysis/aggregate';
 import { renderLibraryExport } from '../analysis/llmExport';
+import { useSettingsStore } from '../state/settings';
+import { MapDetail } from './MapDetail';
+import { CompareView } from './CompareView';
 
 // Analysis view: loads every library entry that has a cached parsed replay
 // and produces cross-replay aggregates + a dense LLM-friendly export. Entries
@@ -15,7 +18,15 @@ export function AnalysisView() {
   const [filterMatchup, setFilterMatchup] = useState<string | null>(null);
   const [filterRace, setFilterRace] = useState<string | null>(null);
   const [filterMap, setFilterMap] = useState<string | null>(null);
+  const [filterMeOnly, setFilterMeOnly] = useState(false);
   const [missing, setMissing] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [comparing, setComparing] = useState(false);
+  const [mapDetail, setMapDetail] = useState<string | null>(null);
+
+  const identities = useSettingsStore((s) => s.identities);
+  const addIdentity = useSettingsStore((s) => s.addIdentity);
+  const removeIdentity = useSettingsStore((s) => s.removeIdentity);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +44,7 @@ export function AnalysisView() {
         try {
           const parsed = await getCachedReplay(e.hash);
           if (!parsed) { miss.push(e.hash); continue; }
-          out.push(digestReplay(e, parsed));
+          out.push(digestReplay(e, parsed, identities));
         } catch (err) {
           console.warn('[analysis] failed to digest', e.hash, err);
           miss.push(e.hash);
@@ -45,16 +56,17 @@ export function AnalysisView() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [identities]);
 
   const filtered = useMemo(() => {
     return digests.filter((d) => {
       if (filterMatchup && d.matchup !== filterMatchup) return false;
       if (filterRace && !d.players.some((p) => p.race === filterRace)) return false;
       if (filterMap && (d.mapName ?? '').toLowerCase() !== filterMap.toLowerCase()) return false;
+      if (filterMeOnly && !d.players.some((p) => p.isMe)) return false;
       return true;
     });
-  }, [digests, filterMatchup, filterRace, filterMap]);
+  }, [digests, filterMatchup, filterRace, filterMap, filterMeOnly]);
 
   const agg = useMemo(() => aggregateDigests(filtered), [filtered]);
 
@@ -102,6 +114,44 @@ export function AnalysisView() {
     setMissing([]);
   };
 
+  const toggleSelect = (hash: string) => {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(hash)) next.delete(hash);
+      else next.add(hash);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelected(new Set());
+  const selectAllFiltered = () => setSelected(new Set(filtered.map((d) => d.hash)));
+
+  const comparingDigests = useMemo(
+    () => digests.filter((d) => selected.has(d.hash)),
+    [digests, selected],
+  );
+
+  if (comparing && comparingDigests.length >= 2) {
+    return (
+      <CompareView
+        digests={comparingDigests}
+        onBack={() => setComparing(false)}
+      />
+    );
+  }
+
+  if (mapDetail) {
+    const forMap = digests.filter(
+      (d) => (d.mapName ?? '').toLowerCase() === mapDetail.toLowerCase(),
+    );
+    return (
+      <MapDetail
+        mapName={mapDetail}
+        digests={forMap}
+        onBack={() => setMapDetail(null)}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm text-[var(--color-text-h)]">
       <div className="flex flex-wrap items-center gap-3">
@@ -141,6 +191,12 @@ export function AnalysisView() {
         </div>
       </div>
 
+      <IdentityBar
+        identities={identities}
+        onAdd={addIdentity}
+        onRemove={removeIdentity}
+      />
+
       <FilterBar
         label="Matchup"
         options={matchups}
@@ -158,7 +214,30 @@ export function AnalysisView() {
         options={maps}
         value={filterMap}
         onChange={setFilterMap}
+        extraAction={
+          filterMap
+            ? {
+                label: 'Open map page',
+                onClick: () => setMapDetail(filterMap),
+              }
+            : undefined
+        }
       />
+      {identities.length > 0 && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="w-16 text-[var(--color-muted)]">Me</span>
+          <button
+            onClick={() => setFilterMeOnly((v) => !v)}
+            className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+              filterMeOnly
+                ? 'bg-[var(--color-accent)] text-white'
+                : 'border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
+            }`}
+          >
+            My games only
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card label="Replays" value={`${filtered.length}`} />
@@ -174,6 +253,8 @@ export function AnalysisView() {
           sub="per building pool"
         />
       </div>
+
+      {agg.me.games > 0 && <MeCard agg={agg.me} />}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
@@ -212,13 +293,43 @@ export function AnalysisView() {
       </div>
 
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
-        <div className="border-b border-[var(--color-border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-          Games ({filtered.length})
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+          <span>Games ({filtered.length})</span>
+          <span className="ml-auto flex items-center gap-2 text-[10px] normal-case">
+            {selected.size > 0 && (
+              <>
+                <span>{selected.size} selected</span>
+                <button
+                  onClick={clearSelection}
+                  className="rounded border border-[var(--color-border)] px-2 py-0.5 hover:text-[var(--color-text-h)]"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => setComparing(true)}
+                  disabled={selected.size < 2}
+                  className="rounded bg-[var(--color-accent)] px-2 py-0.5 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Compare ({selected.size})
+                </button>
+              </>
+            )}
+            {selected.size === 0 && filtered.length > 1 && (
+              <button
+                onClick={selectAllFiltered}
+                className="rounded border border-[var(--color-border)] px-2 py-0.5 hover:text-[var(--color-text-h)]"
+                title="Select all filtered games for comparison"
+              >
+                Select all
+              </button>
+            )}
+          </span>
         </div>
         <div className="max-h-96 overflow-auto">
           <table className="w-full text-xs">
             <thead className="bg-[var(--color-bg-elev)]">
               <tr className="text-left text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+                <th className="w-8 px-3 py-1"></th>
                 <th className="px-3 py-1">Map</th>
                 <th className="px-3 py-1">Matchup</th>
                 <th className="px-3 py-1">Players</th>
@@ -231,12 +342,37 @@ export function AnalysisView() {
                 const winners = d.winnerTeam != null
                   ? d.players.filter((p) => p.team === d.winnerTeam).map((p) => p.name).join(', ')
                   : '';
+                const isSelected = selected.has(d.hash);
                 return (
-                  <tr key={d.hash} className="border-t border-[var(--color-border)]">
-                    <td className="max-w-[200px] truncate px-3 py-1" title={d.mapName}>{d.mapName}</td>
+                  <tr key={d.hash} className={`border-t border-[var(--color-border)] ${isSelected ? 'bg-[color-mix(in_oklab,var(--color-accent)_12%,transparent)]' : ''}`}>
+                    <td className="px-3 py-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(d.hash)}
+                        className="accent-[var(--color-accent)]"
+                        aria-label={`Select ${d.mapName}`}
+                      />
+                    </td>
+                    <td className="max-w-[200px] truncate px-3 py-1" title={d.mapName}>
+                      {d.mapName ? (
+                        <button
+                          onClick={() => d.mapName && setMapDetail(d.mapName)}
+                          className="truncate underline-offset-2 hover:text-[var(--color-accent)] hover:underline"
+                        >
+                          {d.mapName}
+                        </button>
+                      ) : (
+                        <span className="text-[var(--color-muted)]">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-1 font-mono">{d.matchup}</td>
                     <td className="px-3 py-1 text-[var(--color-muted)]">
-                      {d.players.map((p) => `${p.name} (${p.race})`).join(' vs ')}
+                      {d.players.map((p) => (
+                        <span key={p.playerID} className={p.isMe ? 'text-[var(--color-accent)]' : ''}>
+                          {p.name} ({p.race}){p === d.players[d.players.length - 1] ? '' : ' vs '}
+                        </span>
+                      ))}
                     </td>
                     <td className="px-3 py-1 text-right font-mono tabular-nums">{formatMMSS(d.durationSeconds)}</td>
                     <td className="px-3 py-1 text-right">
@@ -253,20 +389,133 @@ export function AnalysisView() {
   );
 }
 
+function IdentityBar({
+  identities,
+  onAdd,
+  onRemove,
+}: {
+  identities: string[];
+  onAdd: (name: string) => void;
+  onRemove: (name: string) => void;
+}) {
+  const [value, setValue] = useState('');
+  const submit = () => {
+    const v = value.trim();
+    if (!v) return;
+    onAdd(v);
+    setValue('');
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="w-16 text-[var(--color-muted)]" title="Names you play under — used to split stats into 'me' vs opponent">
+        Me tags
+      </span>
+      {identities.map((name) => (
+        <span
+          key={name}
+          className="flex items-center gap-1 rounded bg-[color-mix(in_oklab,var(--color-accent)_22%,transparent)] px-2 py-0.5 text-[var(--color-text-h)]"
+        >
+          {name}
+          <button
+            onClick={() => onRemove(name)}
+            className="text-[var(--color-muted)] hover:text-[var(--color-text-h)]"
+            aria-label={`Remove ${name}`}
+            title="Remove"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') submit();
+        }}
+        placeholder={identities.length === 0 ? 'Add your BW name (press Enter)…' : 'Add another…'}
+        className="w-48 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-0.5 text-xs text-[var(--color-text-h)] placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:outline-none"
+      />
+      {value.trim() && (
+        <button
+          onClick={submit}
+          className="rounded border border-[var(--color-border)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-muted)] hover:text-[var(--color-text-h)]"
+        >
+          Add
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MeCard({ agg }: { agg: import('../analysis/aggregate').MeAggregate }) {
+  const decided = agg.wins + agg.losses;
+  const wr = decided > 0 ? Math.round((agg.wins / decided) * 100) : null;
+  return (
+    <div className="rounded-lg border border-[var(--color-accent)]/40 bg-[color-mix(in_oklab,var(--color-accent)_6%,var(--color-bg-panel))] p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-accent)]">
+        As me
+      </div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs md:grid-cols-4">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-[var(--color-muted)]">Games</div>
+          <div className="font-mono text-lg tabular-nums">{agg.games}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-[var(--color-muted)]">Record</div>
+          <div className="font-mono text-lg tabular-nums">
+            {agg.wins}-{agg.losses}
+            {agg.unknown > 0 && <span className="text-[var(--color-muted)]">-{agg.unknown}</span>}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-[var(--color-muted)]">Winrate</div>
+          <div className="font-mono text-lg tabular-nums">{wr != null ? `${wr}%` : '—'}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-[var(--color-muted)]">APM (me vs opp)</div>
+          <div className="font-mono text-lg tabular-nums">
+            {Math.round(agg.averageApmMe)} / {Math.round(agg.averageApmOpp)}
+          </div>
+        </div>
+      </div>
+      {Object.keys(agg.byOpponentRace).length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-mono">
+          {Object.entries(agg.byOpponentRace)
+            .sort((a, b) => b[1].games - a[1].games)
+            .map(([race, v]) => {
+              const d = v.wins + v.losses;
+              const vw = d > 0 ? Math.round((v.wins / d) * 100) : null;
+              return (
+                <span
+                  key={race}
+                  className="rounded bg-[var(--color-bg-elev)] px-2 py-0.5 text-[var(--color-text-h)]"
+                >
+                  vs {race}: {v.wins}-{v.losses} {vw != null ? `(${vw}%)` : ''}
+                </span>
+              );
+            })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FilterBar({
   label,
   options,
   value,
   onChange,
+  extraAction,
 }: {
   label: string;
   options: string[];
   value: string | null;
   onChange: (v: string | null) => void;
+  extraAction?: { label: string; onClick: () => void };
 }) {
   if (options.length <= 1) return null;
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div className="flex flex-wrap items-center gap-2 text-xs">
       <span className="w-16 text-[var(--color-muted)]">{label}</span>
       <button
         onClick={() => onChange(null)}
@@ -291,6 +540,14 @@ function FilterBar({
           {o}
         </button>
       ))}
+      {extraAction && (
+        <button
+          onClick={extraAction.onClick}
+          className="rounded border border-[var(--color-accent)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-white"
+        >
+          {extraAction.label}
+        </button>
+      )}
     </div>
   );
 }

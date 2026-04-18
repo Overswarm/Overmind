@@ -39,6 +39,32 @@ export function renderLibraryExport(digests: ReplayDigest[], agg: Aggregate): st
     );
   }
   lines.push('');
+
+  // Me section — only included when identities were configured and matched.
+  if (agg.me.games > 0) {
+    const decided = agg.me.wins + agg.me.losses;
+    const wr = decided > 0 ? Math.round((agg.me.wins / decided) * 100) : null;
+    lines.push('### As me');
+    lines.push(
+      `- ${agg.me.games} games, ${agg.me.wins}W ${agg.me.losses}L ${agg.me.unknown}?` +
+        (wr != null ? `, winrate ${wr}%` : ''),
+    );
+    lines.push(
+      `- Avg APM: me ${Math.round(agg.me.averageApmMe)} vs opp ${Math.round(agg.me.averageApmOpp)}`,
+    );
+    lines.push(
+      `- Avg units produced: me ${Math.round(agg.me.averageUnitsMe)} vs opp ${Math.round(agg.me.averageUnitsOpp)}`,
+    );
+    for (const [r, v] of Object.entries(agg.me.byOpponentRace).sort((a, b) => b[1].games - a[1].games)) {
+      const d = v.wins + v.losses;
+      const vw = d > 0 ? Math.round((v.wins / d) * 100) : null;
+      lines.push(
+        `- vs ${r}: ${v.games} games, ${v.wins}W ${v.losses}L ${v.unknown}?` +
+          (vw != null ? `, winrate ${vw}%` : ''),
+      );
+    }
+    lines.push('');
+  }
   lines.push('## Replays');
   lines.push('');
 
@@ -55,7 +81,8 @@ export function renderLibraryExport(digests: ReplayDigest[], agg: Aggregate): st
     for (const p of d.players) {
       lines.push(
         `Player ${p.name} [team ${p.team}, ${p.race}] APM ${p.apm} EAPM ${p.eapm}` +
-          (p.won === true ? ' WIN' : p.won === false ? ' LOSS' : ''),
+          (p.won === true ? ' WIN' : p.won === false ? ' LOSS' : '') +
+          (p.isMe ? ' (me)' : ''),
       );
     }
     lines.push('');

@@ -86,12 +86,72 @@ export function isReplayFile(file: { name: string }): boolean {
   return /\.rep$/i.test(file.name);
 }
 
+export function isZipFile(file: { name: string }): boolean {
+  return /\.zip$/i.test(file.name);
+}
+
 export async function readFileBytes(file: File): Promise<ArrayBuffer> {
   return await file.arrayBuffer();
 }
 
-// Collects .rep files from a DataTransferItemList (drag-drop). Recursively
-// descends into folders when the browser supplies a FileSystemEntry.
+// Unzip a .zip (replay pack) and return .rep entries as pseudo-Files. We do
+// not write anything to disk — entries live in memory and are piped into the
+// same ingest pipeline as dropped/picked files. Uses fflate's synchronous
+// unzip which handles Deflate and Stored entries; unsupported compression
+// methods throw and the caller logs them.
+export async function filesFromZip(
+  file: File,
+): Promise<Array<{ file: File; path: string }>> {
+  const { unzipSync, strFromU8 } = await import('fflate');
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const entries = unzipSync(bytes, {
+    filter: (f) => /\.rep$/i.test(f.name),
+  });
+  const out: Array<{ file: File; path: string }> = [];
+  for (const [entryPath, data] of Object.entries(entries)) {
+    if (data.length === 0) continue;
+    // Strip leading path components for display but keep them in `path` so
+    // the library's `path` column reflects the archive's layout.
+    const leaf = entryPath.split('/').pop() || entryPath;
+    // Copy into a plain ArrayBuffer-backed view so File's BlobPart typing
+    // matches (fflate yields Uint8Array<ArrayBufferLike> which TS rejects).
+    const copy = new Uint8Array(data.byteLength);
+    copy.set(data);
+    const pseudo = new File([copy.buffer], leaf, { type: 'application/octet-stream' });
+    out.push({ file: pseudo, path: `${file.name}!/${entryPath}` });
+  }
+  // Reference strFromU8 to satisfy bundlers that tree-shake unused named
+  // imports — fflate ships them together and importing both keeps the
+  // dynamic import's side-effect surface consistent.
+  void strFromU8;
+  return out;
+}
+
+// Given a mix of .rep and .zip files, return a flat list of { file, path }
+// replay entries. Zips are expanded; other files are dropped.
+export async function expandZipsAndReps(
+  files: Array<{ file: File; path: string }>,
+): Promise<Array<{ file: File; path: string }>> {
+  const out: Array<{ file: File; path: string }> = [];
+  for (const entry of files) {
+    if (isReplayFile(entry.file)) {
+      out.push(entry);
+    } else if (isZipFile(entry.file)) {
+      try {
+        const extracted = await filesFromZip(entry.file);
+        out.push(...extracted);
+      } catch (err) {
+        console.warn(`Failed to unzip ${entry.file.name}:`, err);
+      }
+    }
+  }
+  return out;
+}
+
+// Collects .rep and .zip files from a DataTransferItemList (drag-drop).
+// Recursively descends into folders when the browser supplies a
+// FileSystemEntry. Zip entries are returned as-is here; the caller is
+// expected to expand them via `expandZipsAndReps`.
 export async function filesFromDataTransfer(items: DataTransferItemList): Promise<Array<{ file: File; path: string }>> {
   const out: Array<{ file: File; path: string }> = [];
   const walkers: Promise<void>[] = [];
@@ -103,7 +163,7 @@ export async function filesFromDataTransfer(items: DataTransferItemList): Promis
       walkers.push(walkEntry(entry, '', out));
     } else {
       const f = item.getAsFile();
-      if (f && isReplayFile(f)) out.push({ file: f, path: f.name });
+      if (f && (isReplayFile(f) || isZipFile(f))) out.push({ file: f, path: f.name });
     }
   }
   await Promise.all(walkers);
@@ -114,7 +174,9 @@ async function walkEntry(entry: FileSystemEntry, prefix: string, out: Array<{ fi
   if (entry.isFile) {
     const fileEntry = entry as FileSystemFileEntry;
     const file = await new Promise<File>((resolve, reject) => fileEntry.file(resolve, reject));
-    if (isReplayFile(file)) out.push({ file, path: prefix ? `${prefix}/${file.name}` : file.name });
+    if (isReplayFile(file) || isZipFile(file)) {
+      out.push({ file, path: prefix ? `${prefix}/${file.name}` : file.name });
+    }
     return;
   }
   if (entry.isDirectory) {

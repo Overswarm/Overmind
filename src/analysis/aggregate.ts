@@ -33,6 +33,9 @@ export interface PlayerDigest {
   apm: number;
   eapm: number;
   won: boolean | null;         // null when winnerTeam unknown
+  // True when the player's name matches one of the user's configured
+  // identities. Enables me-vs-opponent aggregates.
+  isMe: boolean;
   supplyBlockSeconds: number;
   supplyBlockCount: number;
   productionIdleByPool: { name: string; count: number; idleRatio: number }[];
@@ -50,11 +53,40 @@ export interface Aggregate {
   averageDurationSeconds: number;
   supplyBlockAverageSeconds: number;
   productionIdleAverageRatio: number;
+  // Me-vs-opponent split. Only populated when at least one player in some
+  // digest is flagged isMe; otherwise `me.games === 0`.
+  me: MeAggregate;
+}
+
+export interface MeAggregate {
+  // Games where at least one me-player was found (and not observing).
+  games: number;
+  wins: number;
+  losses: number;
+  unknown: number;
+  // Per-race winrate as me (opponent's race): { "T": {games, wins, losses} }.
+  // Key is the opponent's race; intended for 1v1. For team games we use the
+  // first non-me player on the other team.
+  byOpponentRace: Record<
+    string,
+    { games: number; wins: number; losses: number; unknown: number }
+  >;
+  // Average APM for me and for opponents (across all me-containing games).
+  averageApmMe: number;
+  averageApmOpp: number;
+  // Average build rates: total units / buildings produced per game.
+  averageUnitsMe: number;
+  averageUnitsOpp: number;
 }
 
 // Matchup-agnostic key for a single player line (race + whether we have a
 // parsed replay). Useful for summary tables.
-export function digestReplay(entry: LibraryEntry, replay: ParsedReplay): ReplayDigest {
+export function digestReplay(
+  entry: LibraryEntry,
+  replay: ParsedReplay,
+  identities: string[] = [],
+): ReplayDigest {
+  const identitySet = new Set(identities.map((s) => s.trim().toLowerCase()).filter(Boolean));
   const h = replay.Header;
   const c = replay.Computed;
   const nonObs = (h?.Players ?? []).filter((p) => !p.Observer);
@@ -92,14 +124,18 @@ export function digestReplay(entry: LibraryEntry, replay: ParsedReplay): ReplayD
     const blocks = supplyBlocks.intervals.filter((iv) => iv.playerID === p.ID);
     const pools = production.byPlayer.get(p.ID) ?? [];
 
+    const cleanedName = cleanBwString(p.Name);
+    const isMe = identitySet.has(cleanedName.trim().toLowerCase());
+
     return {
       playerID: p.ID,
-      name: cleanBwString(p.Name),
+      name: cleanedName,
       race: raceLetter(p.Race),
       team: p.Team,
       apm: Math.round(desc?.APM ?? 0),
       eapm: Math.round(desc?.EAPM ?? 0),
       won,
+      isMe,
       supplyBlockSeconds: supplyBlocks.totalSecondsByPID.get(p.ID) ?? 0,
       supplyBlockCount: blocks.length,
       productionIdleByPool: pools
@@ -133,6 +169,21 @@ export function aggregateDigests(digests: ReplayDigest[]): Aggregate {
   let sumIdleRatio = 0;
   let idleN = 0;
 
+  // Me-vs-opponent accumulators.
+  const me: MeAggregate = {
+    games: 0,
+    wins: 0,
+    losses: 0,
+    unknown: 0,
+    byOpponentRace: {},
+    averageApmMe: 0,
+    averageApmOpp: 0,
+    averageUnitsMe: 0,
+    averageUnitsOpp: 0,
+  };
+  let meApmSum = 0, meApmN = 0, oppApmSum = 0, oppApmN = 0;
+  let meUnitsSum = 0, oppUnitsSum = 0;
+
   for (const d of digests) {
     matchupCounts[d.matchup] = (matchupCounts[d.matchup] ?? 0) + 1;
     sumDuration += d.durationSeconds;
@@ -152,12 +203,47 @@ export function aggregateDigests(digests: ReplayDigest[]): Aggregate {
         idleN += 1;
       }
     }
+
+    // Me side of this game: treat as "me" if any me-flagged player is present.
+    // If multiple me-players (team game), take the first as the representative.
+    const mePlayers = d.players.filter((p) => p.isMe);
+    if (mePlayers.length > 0) {
+      const meRep = mePlayers[0];
+      const oppPlayers = d.players.filter((p) => p.team !== meRep.team);
+      if (oppPlayers.length > 0) {
+        me.games += 1;
+        if (meRep.won === true) me.wins += 1;
+        else if (meRep.won === false) me.losses += 1;
+        else me.unknown += 1;
+
+        const oppRep = oppPlayers[0];
+        const key = oppRep.race;
+        me.byOpponentRace[key] ??= { games: 0, wins: 0, losses: 0, unknown: 0 };
+        me.byOpponentRace[key].games += 1;
+        if (meRep.won === true) me.byOpponentRace[key].wins += 1;
+        else if (meRep.won === false) me.byOpponentRace[key].losses += 1;
+        else me.byOpponentRace[key].unknown += 1;
+
+        for (const p of mePlayers) { meApmSum += p.apm; meApmN += 1; }
+        for (const p of oppPlayers) { oppApmSum += p.apm; oppApmN += 1; }
+
+        const sumUnits = (d2: typeof meRep) =>
+          Object.values(d2.unitsProduced).reduce((a, b) => a + b, 0);
+        meUnitsSum += sumUnits(meRep);
+        oppUnitsSum += sumUnits(oppRep);
+      }
+    }
   }
 
   const averageApmByRace: Record<string, number> = {};
   for (const [r, v] of Object.entries(apmByRace)) {
     averageApmByRace[r] = v.n > 0 ? v.sum / v.n : 0;
   }
+
+  me.averageApmMe = meApmN > 0 ? meApmSum / meApmN : 0;
+  me.averageApmOpp = oppApmN > 0 ? oppApmSum / oppApmN : 0;
+  me.averageUnitsMe = me.games > 0 ? meUnitsSum / me.games : 0;
+  me.averageUnitsOpp = me.games > 0 ? oppUnitsSum / me.games : 0;
 
   return {
     totalGames: digests.length,
@@ -167,6 +253,7 @@ export function aggregateDigests(digests: ReplayDigest[]): Aggregate {
     averageDurationSeconds: digests.length > 0 ? sumDuration / digests.length : 0,
     supplyBlockAverageSeconds: sbN > 0 ? sumSupplyBlockSec / sbN : 0,
     productionIdleAverageRatio: idleN > 0 ? sumIdleRatio / idleN : 0,
+    me,
   };
 }
 

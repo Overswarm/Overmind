@@ -1,5 +1,14 @@
 import { useCallback, useRef, useState } from 'react';
-import { ingestFile, filesFromDataTransfer, isReplayFile, pickFolder, readFileBytes, supportsFolderPicker } from '../storage/ingest';
+import {
+  ingestFile,
+  filesFromDataTransfer,
+  isReplayFile,
+  isZipFile,
+  expandZipsAndReps,
+  pickFolder,
+  readFileBytes,
+  supportsFolderPicker,
+} from '../storage/ingest';
 import { useAppStore } from '../state/store';
 
 export function DropZone() {
@@ -11,9 +20,22 @@ export function DropZone() {
   const setError = useAppStore((s) => s.setError);
 
   const ingestMany = useCallback(
-    async (entries: Array<{ file: File; path: string }>) => {
-      if (entries.length === 0) return;
+    async (rawEntries: Array<{ file: File; path: string }>) => {
+      if (rawEntries.length === 0) return;
       setError(null);
+
+      // Expand any .zip replay packs transparently before parsing.
+      const hasZips = rawEntries.some((e) => isZipFile(e.file));
+      if (hasZips) {
+        setLoading(true, 'Extracting replay packs…');
+      }
+      const entries = hasZips ? await expandZipsAndReps(rawEntries) : rawEntries;
+      if (entries.length === 0) {
+        setLoading(false);
+        setError('No .rep files found in the selected archive(s).');
+        return;
+      }
+
       setProgress({ done: 0, total: entries.length });
       setLoading(true, `Parsing ${entries.length} replay${entries.length === 1 ? '' : 's'}`);
       try {
@@ -57,7 +79,12 @@ export function DropZone() {
       if (!files) return;
       const entries: Array<{ file: File; path: string }> = [];
       for (const f of Array.from(files)) {
-        if (isReplayFile(f)) entries.push({ file: f, path: (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name });
+        if (isReplayFile(f) || isZipFile(f)) {
+          entries.push({
+            file: f,
+            path: (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name,
+          });
+        }
       }
       await ingestMany(entries);
       ev.target.value = '';
@@ -91,7 +118,7 @@ export function DropZone() {
         dragActive ? 'border-[var(--color-accent)] bg-[color-mix(in_oklab,var(--color-accent)_10%,transparent)]' : 'border-[var(--color-border)]'
       }`}
     >
-      <div className="text-lg font-medium text-[var(--color-text-h)]">Drop .rep files or folders</div>
+      <div className="text-lg font-medium text-[var(--color-text-h)]">Drop .rep files, .zip replay packs, or folders</div>
       <div className="mt-1 text-sm text-[var(--color-muted)]">Parsed locally in your browser. Nothing is uploaded.</div>
       <div className="mt-6 flex gap-3">
         <button
@@ -114,7 +141,7 @@ export function DropZone() {
         type="file"
         className="hidden"
         multiple
-        accept=".rep"
+        accept=".rep,.zip"
         onChange={onPick}
       />
       {progress && (

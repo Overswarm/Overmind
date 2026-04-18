@@ -6,6 +6,9 @@ import { renderLibraryExport } from '../analysis/llmExport';
 import { useSettingsStore } from '../state/settings';
 import { MapDetail } from './MapDetail';
 import { CompareView } from './CompareView';
+import { TimingsCard } from './TimingsCard';
+import { TrendChart } from './TrendChart';
+import { OpponentProfile } from './OpponentProfile';
 
 // Analysis view: loads every library entry that has a cached parsed replay
 // and produces cross-replay aggregates + a dense LLM-friendly export. Entries
@@ -291,6 +294,12 @@ export function AnalysisView() {
           </div>
         </div>
       </div>
+
+      <TimingsCard agg={agg} />
+
+      <TrendChart digests={filtered} hasIdentities={identities.length > 0} />
+
+      {identities.length > 0 && <OpponentProfile digests={filtered} />}
 
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">

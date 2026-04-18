@@ -8,7 +8,8 @@
 // questions can be answered without reading every replay.
 
 import { formatMMSS } from '../types/replay';
-import type { ReplayDigest, Aggregate } from './aggregate';
+import type { ReplayDigest, Aggregate, AverageTimings } from './aggregate';
+import { formatTiming } from './timings';
 
 export function renderLibraryExport(digests: ReplayDigest[], agg: Aggregate): string {
   const lines: string[] = [];
@@ -39,6 +40,13 @@ export function renderLibraryExport(digests: ReplayDigest[], agg: Aggregate): st
     );
   }
   lines.push('');
+  lines.push('### Avg macro timings by race');
+  for (const [r, t] of Object.entries(agg.timingsByRace)) {
+    lines.push(
+      `- ${r}: gas ${formatTiming(t.firstGasSeconds)}, expo ${formatTiming(t.firstExpansionSeconds)}, tech ${formatTiming(t.firstTechBuildingSeconds)}, first army ${formatTiming(t.firstCombatUnitSeconds)}, s100 ${formatTiming(t.supply100Seconds)}, s150 ${formatTiming(t.supply150Seconds)}`,
+    );
+  }
+  lines.push('');
 
   // Me section — only included when identities were configured and matched.
   if (agg.me.games > 0) {
@@ -61,6 +69,22 @@ export function renderLibraryExport(digests: ReplayDigest[], agg: Aggregate): st
       lines.push(
         `- vs ${r}: ${v.games} games, ${v.wins}W ${v.losses}L ${v.unknown}?` +
           (vw != null ? `, winrate ${vw}%` : ''),
+      );
+    }
+    lines.push('');
+    lines.push('#### Me timings vs opponent (avg)');
+    const rows: Array<[string, keyof AverageTimings]> = [
+      ['First gas', 'firstGasSeconds'],
+      ['First expo', 'firstExpansionSeconds'],
+      ['First tech', 'firstTechBuildingSeconds'],
+      ['First army unit', 'firstCombatUnitSeconds'],
+      ['Supply 50', 'supply50Seconds'],
+      ['Supply 100', 'supply100Seconds'],
+      ['Supply 150', 'supply150Seconds'],
+    ];
+    for (const [label, key] of rows) {
+      lines.push(
+        `- ${label}: me ${formatTiming(agg.me.timingsMe[key])} · opp ${formatTiming(agg.me.timingsOpp[key])}`,
       );
     }
     lines.push('');
@@ -108,6 +132,10 @@ export function renderLibraryExport(digests: ReplayDigest[], agg: Aggregate): st
           .join(', ');
         lines.push(`Production idle: ${idle}`);
       }
+      const t = p.timings;
+      lines.push(
+        `Timings: gas ${formatTiming(t.firstGasSeconds)}, expo ${formatTiming(t.firstExpansionSeconds)}, tech ${formatTiming(t.firstTechBuildingSeconds)}${t.firstTechName ? ` (${t.firstTechName})` : ''}, first army ${formatTiming(t.firstCombatUnitSeconds)}${t.firstCombatUnitName ? ` (${t.firstCombatUnitName})` : ''}, s100 ${formatTiming(t.supply100Seconds)}, s150 ${formatTiming(t.supply150Seconds)}`,
+      );
       lines.push('');
     }
 

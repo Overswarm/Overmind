@@ -4,6 +4,7 @@ import { Timeline } from './ui/Timeline';
 import { Library } from './ui/Library';
 import { DropZone } from './ui/DropZone';
 import { AnalysisView } from './ui/AnalysisView';
+import { StatsView } from './ui/StatsView';
 import { DualTrackPanel } from './ui/panels/DualTrackPanel';
 import { BuildOrderPanel } from './ui/panels/BuildOrderPanel';
 import { RosterPanel } from './ui/panels/RosterPanel';
@@ -17,7 +18,7 @@ import { DebugPanel } from './ui/panels/DebugPanel';
 import { useAppStore } from './state/store';
 
 type RightPanel = 'heatmap' | 'hotkeys' | 'macro' | 'notes' | 'debug' | null;
-type View = 'replay' | 'analysis';
+type View = 'replay' | 'analysis' | 'stats';
 
 function App() {
   const active = useAppStore((s) => s.active);
@@ -33,7 +34,7 @@ function App() {
           <MetadataHeader />
         </div>
         <div className="flex items-stretch">
-          {(['replay', 'analysis'] as const).map((v) => (
+          {(['replay', 'analysis', 'stats'] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -42,7 +43,13 @@ function App() {
                   ? 'bg-[var(--color-accent)] text-white'
                   : 'text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
               }`}
-              title={v === 'replay' ? 'Per-replay analysis' : 'Aggregate analysis across your library'}
+              title={
+                v === 'replay'
+                  ? 'Per-replay analysis'
+                  : v === 'analysis'
+                    ? 'Aggregate analysis across your library'
+                    : 'Fun factoids and career records'
+              }
             >
               {v}
             </button>
@@ -91,6 +98,8 @@ function App() {
         <section className="min-h-0 overflow-auto p-4">
           {view === 'analysis' ? (
             <AnalysisView />
+          ) : view === 'stats' ? (
+            <StatsView />
           ) : !active ? (
             <div className="mx-auto max-w-2xl">
               <DropZone />

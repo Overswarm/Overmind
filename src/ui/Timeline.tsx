@@ -6,9 +6,9 @@ import type { SwingMarker } from '../analysis/swings';
 
 const KIND_COLOR: Record<SwingMarker['kind'], string> = {
   expansion: 'var(--color-accent)',
-  tech: '#a78bfa',
-  unit: '#f59e0b',
-  scout: '#34d399',
+  tech: 'var(--color-swing-tech)',
+  unit: 'var(--color-swing-unit)',
+  scout: 'var(--color-swing-scout)',
 };
 
 const PLAYBACK_SPEEDS = [0.5, 1, 2, 4, 8] as const;

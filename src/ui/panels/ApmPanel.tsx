@@ -37,7 +37,7 @@ export function ApmPanel() {
       <div className="border-b border-[var(--color-border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         APM / EAPM
       </div>
-      <div className="flex-1 overflow-auto p-3">
+      <div className="min-h-0 flex-1 overflow-auto p-3">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-[10px] uppercase tracking-wide text-[var(--color-muted)]">

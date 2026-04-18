@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { AlignedData, Options } from 'uplot';
 import { useAppStore } from '../../state/store';
+import { useSettingsStore } from '../../state/settings';
 import { cachedTimeSeries } from '../../analysis/cache';
 import { cleanBwString, FRAMES_PER_SECOND, formatMMSS } from '../../types/replay';
 import { UPlotChart } from '../UPlotChart';
@@ -17,8 +18,21 @@ const METRIC_LABELS: Record<Metric, string> = {
   eapm: 'EAPM (rolling 30s)',
 };
 
-// Two colors in sequence, matched to the metadata header dots.
-const PLAYER_STROKES = ['#38bdf8', '#f97316', '#a855f7', '#f472b6'];
+// Player strokes resolved from the active theme at render-time. uPlot draws
+// on a canvas, so it needs literal color strings — `var(...)` won't resolve.
+const PLAYER_STROKE_VARS = [
+  '--color-player-a',
+  '--color-player-b',
+  '--color-player-c',
+  '--color-player-d',
+] as const;
+const PLAYER_STROKE_FALLBACKS = ['#38bdf8', '#f97316', '#a855f7', '#f472b6'];
+
+function cssVar(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 
 export function DualTrackPanel() {
   const active = useAppStore((s) => s.active);
@@ -27,6 +41,8 @@ export function DualTrackPanel() {
   const setHoverFrame = useAppStore((s) => s.setHoverFrame);
 
   const [metric, setMetric] = useState<Metric>('supplyProduced');
+  // Subscribing to theme forces the memo below to recompute colors on change.
+  const theme = useSettingsStore((s) => s.theme);
 
   const series = useMemo(() => {
     if (!active) return null;
@@ -37,10 +53,16 @@ export function DualTrackPanel() {
     if (!series) return { data: null as AlignedData | null, options: null as Options | null, atCursor: [] as { name: string; value: number; color: string }[] };
     const ys: number[][] = series.players.map((p) => p[metric]);
     const data: AlignedData = [series.timeSeconds, ...ys];
+    // The panel renders its own cursor readout above the chart (see atCursor
+    // below), so disable uPlot's built-in legend — it renders outside the
+    // plot area and was getting clipped by the next grid row.
+    const axisStroke = cssVar('--color-chart-axis', '#6b7280');
+    const gridStroke = cssVar('--color-chart-grid', 'rgba(107,114,128,0.18)');
     const options: Options = {
       width: 600,
       height: 260,
       padding: [8, 8, 24, 40],
+      legend: { show: false },
       cursor: {
         // Clicks jump the main timeline to the cursor position; moves publish
         // a hoverFrame so other panels can highlight the same moment.
@@ -72,20 +94,20 @@ export function DualTrackPanel() {
       scales: { x: { time: false } },
       axes: [
         {
-          stroke: '#6b7280',
-          grid: { stroke: 'rgba(107,114,128,0.15)' },
+          stroke: axisStroke,
+          grid: { stroke: gridStroke },
           values: (_u, ticks) => ticks.map((t) => formatMMSS(t)),
         },
         {
-          stroke: '#6b7280',
-          grid: { stroke: 'rgba(107,114,128,0.15)' },
+          stroke: axisStroke,
+          grid: { stroke: gridStroke },
         },
       ],
       series: [
         { label: 'time' },
         ...series.players.map((p, i) => ({
           label: cleanBwString(p.name),
-          stroke: PLAYER_STROKES[i % PLAYER_STROKES.length],
+          stroke: cssVar(PLAYER_STROKE_VARS[i % PLAYER_STROKE_VARS.length], PLAYER_STROKE_FALLBACKS[i % PLAYER_STROKE_FALLBACKS.length]),
           width: 1.5,
           points: { show: false },
         })),
@@ -101,10 +123,12 @@ export function DualTrackPanel() {
       value: metric === 'apm' || metric === 'eapm'
         ? Math.round(p[metric][idx] ?? 0)
         : p[metric][idx] ?? 0,
-      color: PLAYER_STROKES[i % PLAYER_STROKES.length],
+      color: cssVar(PLAYER_STROKE_VARS[i % PLAYER_STROKE_VARS.length], PLAYER_STROKE_FALLBACKS[i % PLAYER_STROKE_FALLBACKS.length]),
     }));
     return { data, options, atCursor };
-  }, [series, metric, currentFrame, setFrame, setHoverFrame]);
+    // `theme` is intentionally a dep so colors refresh when the user cycles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [series, metric, currentFrame, setFrame, setHoverFrame, theme]);
 
   if (!active) return null;
 
@@ -146,7 +170,14 @@ export function DualTrackPanel() {
           )}
         </div>
         <div className="min-h-0 flex-1">
-          {data && options && <UPlotChart data={data} options={options} className="h-full w-full" />}
+          {data && options && (
+            <UPlotChart
+              key={theme}
+              data={data}
+              options={options}
+              className="h-full w-full"
+            />
+          )}
         </div>
       </div>
     </div>

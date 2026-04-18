@@ -12,13 +12,26 @@
 import { useMemo } from 'react';
 import type { AlignedData, Options, Series } from 'uplot';
 import type { ReplayDigest } from '../analysis/aggregate';
+import { useSettingsStore } from '../state/settings';
 import { UPlotChart } from './UPlotChart';
 
 const WINDOW = 10;   // number of most recent decided games to roll over
-const MATCHUP_COLORS: Record<string, string> = {
-  T: '#f97316', P: '#38bdf8', Z: '#a855f7',
+const RACE_VARS: Record<string, string> = {
+  T: '--color-race-t',
+  P: '--color-race-p',
+  Z: '--color-race-z',
 };
-const OVERALL_COLOR = '#eab308';
+const RACE_FALLBACKS: Record<string, string> = {
+  T: '#f97316',
+  P: '#38bdf8',
+  Z: '#a855f7',
+};
+
+function cssVar(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 
 interface OrderedDigest {
   digest: ReplayDigest;
@@ -26,6 +39,7 @@ interface OrderedDigest {
 }
 
 export function TrendChart({ digests, hasIdentities }: { digests: ReplayDigest[]; hasIdentities: boolean }) {
+  const theme = useSettingsStore((s) => s.theme);
   const ordered = useMemo<OrderedDigest[]>(() => {
     return [...digests]
       .map((d, i) => ({
@@ -78,12 +92,14 @@ export function TrendChart({ digests, hasIdentities }: { digests: ReplayDigest[]
         });
       }
 
+      const axisStroke = cssVar('--color-chart-axis', '#64748b');
+      const accent = cssVar('--color-accent-2', '#eab308');
       const series: Series[] = [
         { label: 'Game' },
-        { label: `Overall (${WINDOW}-game)`, stroke: OVERALL_COLOR, width: 2 },
+        { label: `Overall (${WINDOW}-game)`, stroke: accent, width: 2 },
         ...perRace.map((p) => ({
           label: `vs ${p.race}`,
-          stroke: MATCHUP_COLORS[p.race] ?? '#94a3b8',
+          stroke: cssVar(RACE_VARS[p.race] ?? '', RACE_FALLBACKS[p.race] ?? '#94a3b8'),
           width: 1.5,
           dash: [4, 4],
         })),
@@ -106,11 +122,11 @@ export function TrendChart({ digests, hasIdentities }: { digests: ReplayDigest[]
         },
         axes: [
           {
-            stroke: '#64748b',
+            stroke: axisStroke,
             values: (_u, vals) => vals.map((v) => `#${v}`),
           },
           {
-            stroke: '#64748b',
+            stroke: axisStroke,
             values: (_u, vals) => vals.map((v) => `${v}%`),
           },
         ],
@@ -128,6 +144,7 @@ export function TrendChart({ digests, hasIdentities }: { digests: ReplayDigest[]
       running[digest.matchup] = (running[digest.matchup] ?? 0) + 1;
       matchups.forEach((m, i) => counts[i].push(running[m]));
     }
+    const axisStroke = cssVar('--color-chart-axis', '#64748b');
     const series: Series[] = [
       { label: 'Game' },
       ...matchups.map((m, i) => ({
@@ -143,10 +160,12 @@ export function TrendChart({ digests, hasIdentities }: { digests: ReplayDigest[]
       padding: [8, 8, 24, 40],
       series,
       scales: { x: { time: false } },
+      axes: [{ stroke: axisStroke }, { stroke: axisStroke }],
       legend: { show: true },
     };
     return { data, options, empty: false };
-  }, [ordered, hasIdentities]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ordered, hasIdentities, theme]);
 
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] p-3">
@@ -165,7 +184,7 @@ export function TrendChart({ digests, hasIdentities }: { digests: ReplayDigest[]
           Need at least 3 games in the filtered set to show a trend.
         </div>
       ) : (
-        data && options && <UPlotChart data={data} options={options} className="h-[220px]" />
+        data && options && <UPlotChart key={theme} data={data} options={options} className="h-[220px]" />
       )}
       {hasIdentities && !empty && (
         <div className="mt-1 text-[10px] text-[var(--color-muted)]">

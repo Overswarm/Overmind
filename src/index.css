@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import 'uplot/dist/uPlot.min.css';
 
+/* Default (purple / slate) — the original palette. All theme variants simply
+ * override a subset of these variables on the document root via data-theme. */
 @theme {
   --color-bg: #0b0d12;
   --color-bg-elev: #12151d;
@@ -13,8 +15,82 @@
   --color-accent-2: #22d3ee;
   --color-player-a: #38bdf8;
   --color-player-b: #f97316;
+  --color-player-c: #a855f7;
+  --color-player-d: #f472b6;
+  /* Chart + timeline + race-specific semantic colors. Themable so Zerg mode
+   * can lean purple/red for axes, Terran lean steel-blue, etc. Race (T/P/Z)
+   * colors stay constant across themes — they're semantic, not decorative. */
+  --color-chart-axis: #6b7280;
+  --color-chart-grid: rgba(107, 114, 128, 0.18);
+  --color-swing-tech: #a78bfa;
+  --color-swing-unit: #f59e0b;
+  --color-swing-scout: #34d399;
+  --color-race-t: #f97316;
+  --color-race-p: #38bdf8;
+  --color-race-z: #a855f7;
+  --color-win: #34d399;
+  --color-loss: #f43f5e;
+  --color-minerals: rgba(125, 211, 252, 0.8);
+  --color-geysers: rgba(74, 222, 128, 0.9);
   --font-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'JetBrains Mono', Consolas, monospace;
+}
+
+/* Terran: industrial steel/blue. */
+:root[data-theme='terran'] {
+  --color-bg: #080c14;
+  --color-bg-elev: #101721;
+  --color-bg-panel: #14202c;
+  --color-border: #1f2d3e;
+  --color-muted: #64748b;
+  --color-text: #cbd5e1;
+  --color-text-h: #f1f5f9;
+  --color-accent: #3b82f6;
+  --color-accent-2: #f59e0b;
+  --color-player-a: #60a5fa;
+  --color-player-b: #fbbf24;
+  --color-player-c: #22d3ee;
+  --color-player-d: #f87171;
+  --color-chart-axis: #64748b;
+  --color-chart-grid: rgba(100, 116, 139, 0.2);
+}
+
+/* Protoss: gold on warm dark. */
+:root[data-theme='protoss'] {
+  --color-bg: #110c06;
+  --color-bg-elev: #1a140c;
+  --color-bg-panel: #201812;
+  --color-border: #33281a;
+  --color-muted: #a8937a;
+  --color-text: #e7d9c4;
+  --color-text-h: #faf0dd;
+  --color-accent: #eab308;
+  --color-accent-2: #38bdf8;
+  --color-player-a: #fbbf24;
+  --color-player-b: #38bdf8;
+  --color-player-c: #f472b6;
+  --color-player-d: #c084fc;
+  --color-chart-axis: #a8937a;
+  --color-chart-grid: rgba(168, 147, 122, 0.2);
+}
+
+/* Zerg: violet/crimson, creep-warm backgrounds. */
+:root[data-theme='zerg'] {
+  --color-bg: #0d0710;
+  --color-bg-elev: #160c1c;
+  --color-bg-panel: #1c1122;
+  --color-border: #2e1a38;
+  --color-muted: #9a7aa8;
+  --color-text: #d8c6e1;
+  --color-text-h: #f5e8fb;
+  --color-accent: #c084fc;
+  --color-accent-2: #ef4444;
+  --color-player-a: #d946ef;
+  --color-player-b: #f87171;
+  --color-player-c: #60a5fa;
+  --color-player-d: #facc15;
+  --color-chart-axis: #9a7aa8;
+  --color-chart-grid: rgba(154, 122, 168, 0.2);
 }
 
 html,

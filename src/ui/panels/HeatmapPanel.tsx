@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../state/store';
+import { useSettingsStore } from '../../state/settings';
 import { cleanBwString } from '../../types/replay';
 import { cachedHeatmap } from '../../analysis/cache';
 import type { HeatmapMode } from '../../analysis/heatmap';
+
+function cssVar(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 
 const PLAYER_COLORS: Array<[number, number, number]> = [
   [56, 189, 248],   // player A: sky
@@ -21,6 +28,8 @@ export function HeatmapPanel() {
   const active = useAppStore((s) => s.active);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [mode, setMode] = useState<HeatmapMode>('all');
+  // Subscribing to theme re-runs the canvas draw effect below on change.
+  const theme = useSettingsStore((s) => s.theme);
 
   const { grid, players, startLocations, minerals, geysers } = useMemo(() => {
     if (!active) return { grid: null, players: [], startLocations: [], minerals: [], geysers: [] };
@@ -73,8 +82,8 @@ export function HeatmapPanel() {
     canvas.style.width = `${Math.floor(w)}px`;
     canvas.style.height = `${Math.floor(h)}px`;
 
-    // Dark background.
-    ctx.fillStyle = '#0f172a';
+    // Dark background — keyed off the panel bg so themes blend.
+    ctx.fillStyle = cssVar('--color-bg', '#0f172a');
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Render each player's grid as a translucent additive overlay. Using an
@@ -112,14 +121,14 @@ export function HeatmapPanel() {
 
     // Mineral fields: small cyan squares. Drawn before start rings so rings
     // sit on top if a base overlaps its minerals.
-    ctx.fillStyle = 'rgba(125, 211, 252, 0.8)';
+    ctx.fillStyle = cssVar('--color-minerals', 'rgba(125, 211, 252, 0.8)');
     for (const m of minerals) {
       const { x, y } = toCanvas(m);
       const s = 2 * devicePixelRatio;
       ctx.fillRect(x - s, y - s, s * 2, s * 2);
     }
     // Geysers: slightly larger green diamonds.
-    ctx.fillStyle = 'rgba(74, 222, 128, 0.9)';
+    ctx.fillStyle = cssVar('--color-geysers', 'rgba(74, 222, 128, 0.9)');
     for (const g of geysers) {
       const { x, y } = toCanvas(g);
       const s = 3 * devicePixelRatio;
@@ -145,7 +154,7 @@ export function HeatmapPanel() {
       ctx.lineWidth = 2 * devicePixelRatio;
       ctx.stroke();
     }
-  }, [grid, players, startLocations, minerals, geysers]);
+  }, [grid, players, startLocations, minerals, geysers, theme]);
 
   if (!active) return null;
 

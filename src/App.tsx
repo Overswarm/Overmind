@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MetadataHeader } from './ui/MetadataHeader';
 import { Timeline } from './ui/Timeline';
 import { Library } from './ui/Library';
@@ -16,6 +16,7 @@ import { MacroPanel } from './ui/panels/MacroPanel';
 import { NotesPanel } from './ui/panels/NotesPanel';
 import { DebugPanel } from './ui/panels/DebugPanel';
 import { useAppStore } from './state/store';
+import { useSettingsStore } from './state/settings';
 
 type RightPanel = 'heatmap' | 'hotkeys' | 'macro' | 'notes' | 'debug' | null;
 type View = 'replay' | 'analysis' | 'stats';
@@ -24,36 +25,22 @@ function App() {
   const active = useAppStore((s) => s.active);
   const loading = useAppStore((s) => s.loading);
   const error = useAppStore((s) => s.error);
+  const theme = useSettingsStore((s) => s.theme);
+  const cycleTheme = useSettingsStore((s) => s.cycleTheme);
   const [rightPanel, setRightPanel] = useState<RightPanel>('heatmap');
   const [view, setView] = useState<View>('replay');
+
+  // Apply the current theme as a data-attribute on <html> so the per-theme
+  // CSS variable blocks in index.css take effect globally.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   return (
     <div className="grid h-screen w-screen grid-rows-[auto_1fr_auto] bg-[var(--color-bg)]">
       <header className="flex items-stretch border-b border-[var(--color-border)] bg-[var(--color-bg-elev)]">
         <div className="flex-1">
           <MetadataHeader />
-        </div>
-        <div className="flex items-stretch">
-          {(['replay', 'analysis', 'stats'] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`border-l border-[var(--color-border)] px-3 text-[10px] font-semibold uppercase tracking-wide ${
-                view === v
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
-              }`}
-              title={
-                v === 'replay'
-                  ? 'Per-replay analysis'
-                  : v === 'analysis'
-                    ? 'Aggregate analysis across your library'
-                    : 'Fun factoids and career records'
-              }
-            >
-              {v}
-            </button>
-          ))}
         </div>
         {active && view === 'replay' && (
           <div className="flex items-stretch">
@@ -83,6 +70,35 @@ function App() {
             ))}
           </div>
         )}
+        <div className="flex items-stretch">
+          {(['replay', 'analysis', 'stats'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`border-l border-[var(--color-border)] px-3 text-[10px] font-semibold uppercase tracking-wide ${
+                view === v
+                  ? 'bg-[var(--color-accent)] text-white'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
+              }`}
+              title={
+                v === 'replay'
+                  ? 'Per-replay analysis'
+                  : v === 'analysis'
+                    ? 'Aggregate analysis across your library'
+                    : 'Fun factoids and career records'
+              }
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={cycleTheme}
+          className="border-l border-[var(--color-border)] px-3 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] hover:text-[var(--color-text-h)]"
+          title={`Theme: ${theme}. Click to cycle (default → terran → protoss → zerg)`}
+        >
+          {theme}
+        </button>
       </header>
 
       <main className="grid min-h-0 grid-cols-[280px_1fr]">

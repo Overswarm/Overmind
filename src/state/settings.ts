@@ -9,31 +9,42 @@ import { create } from 'zustand';
 
 const STORAGE_KEY = 'overmind.settings.v1';
 
+// Available themes. Default is the original purple/slate palette; the three
+// race themes recolor the whole app (backgrounds, accents, chart axes, etc.)
+// so reviewing Zerg games feels like Zerg.
+export type Theme = 'default' | 'terran' | 'protoss' | 'zerg';
+export const THEMES: Theme[] = ['default', 'terran', 'protoss', 'zerg'];
+
 export interface Settings {
   // Names (cleaned, case-insensitive) the user plays under. Used to split
   // aggregates into "me" vs "opponent" — winrate as me, my APM vs theirs, etc.
   identities: string[];
+  theme: Theme;
 }
 
 interface SettingsState extends Settings {
   setIdentities: (names: string[]) => void;
   addIdentity: (name: string) => void;
   removeIdentity: (name: string) => void;
+  setTheme: (t: Theme) => void;
+  cycleTheme: () => void;
 }
 
 function load(): Settings {
-  if (typeof localStorage === 'undefined') return { identities: [] };
+  const fallback: Settings = { identities: [], theme: 'default' };
+  if (typeof localStorage === 'undefined') return fallback;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { identities: [] };
+    if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<Settings>;
     return {
       identities: Array.isArray(parsed.identities)
         ? parsed.identities.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
         : [],
+      theme: THEMES.includes(parsed.theme as Theme) ? (parsed.theme as Theme) : 'default',
     };
   } catch {
-    return { identities: [] };
+    return fallback;
   }
 }
 
@@ -63,7 +74,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (!cleaned.some((c) => eqCI(c, t))) cleaned.push(t);
     }
     set({ identities: cleaned });
-    save({ identities: cleaned });
+    save({ ...get(), identities: cleaned });
   },
   addIdentity: (name) => {
     const t = normalize(name);
@@ -72,13 +83,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (cur.some((c) => eqCI(c, t))) return;
     const next = [...cur, t];
     set({ identities: next });
-    save({ identities: next });
+    save({ ...get(), identities: next });
   },
   removeIdentity: (name) => {
     const t = normalize(name);
     const next = get().identities.filter((c) => !eqCI(c, t));
     set({ identities: next });
-    save({ identities: next });
+    save({ ...get(), identities: next });
+  },
+  setTheme: (theme) => {
+    if (!THEMES.includes(theme)) return;
+    set({ theme });
+    save({ ...get(), theme });
+  },
+  cycleTheme: () => {
+    const cur = get().theme;
+    const idx = THEMES.indexOf(cur);
+    const next = THEMES[(idx + 1) % THEMES.length];
+    set({ theme: next });
+    save({ ...get(), theme: next });
   },
 }));
 

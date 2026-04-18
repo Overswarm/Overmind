@@ -106,8 +106,16 @@ function PlayerBlock({ p }: { p: PlayerDigest }) {
           <span className="text-[var(--color-muted)]">{p.race}</span>
           {p.isMe && <span className="rounded bg-[var(--color-accent)] px-1 text-[9px] text-white">me</span>}
         </div>
-        {p.won === true && <span className="text-[10px] font-semibold text-emerald-400">WIN</span>}
-        {p.won === false && <span className="text-[10px] font-semibold text-rose-400">LOSS</span>}
+        {p.won === true && (
+          <span className="text-[10px] font-semibold" style={{ color: 'var(--color-win)' }}>
+            WIN
+          </span>
+        )}
+        {p.won === false && (
+          <span className="text-[10px] font-semibold" style={{ color: 'var(--color-loss)' }}>
+            LOSS
+          </span>
+        )}
       </div>
       <div className="mt-0.5 grid grid-cols-3 gap-1 font-mono text-[10px] tabular-nums text-[var(--color-muted)]">
         <div>APM <span className="text-[var(--color-text-h)]">{p.apm}</span></div>

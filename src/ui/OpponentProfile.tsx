@@ -76,9 +76,9 @@ export function OpponentProfile({ digests }: { digests: ReplayDigest[] }) {
                 </div>
                 <div className="flex items-center gap-3 font-mono text-[11px] tabular-nums">
                   <span title="Your record against them">
-                    <span className="text-emerald-400">{o.wins}</span>
+                    <span style={{ color: 'var(--color-win)' }}>{o.wins}</span>
                     -
-                    <span className="text-rose-400">{o.losses}</span>
+                    <span style={{ color: 'var(--color-loss)' }}>{o.losses}</span>
                     {o.unknown > 0 && <span className="text-[var(--color-muted)]">-{o.unknown}</span>}
                   </span>
                   <span className="text-[var(--color-muted)]">
@@ -202,9 +202,9 @@ function OpponentDetail({ o }: { o: OpponentSummary }) {
                   </td>
                   <td className="px-2 py-0.5 text-right font-mono">
                     {me.won === true ? (
-                      <span className="text-emerald-400">W</span>
+                      <span style={{ color: 'var(--color-win)' }}>W</span>
                     ) : me.won === false ? (
-                      <span className="text-rose-400">L</span>
+                      <span style={{ color: 'var(--color-loss)' }}>L</span>
                     ) : (
                       <span className="text-[var(--color-muted)]">?</span>
                     )}

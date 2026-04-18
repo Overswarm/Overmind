@@ -16,7 +16,7 @@ import { MacroPanel } from './ui/panels/MacroPanel';
 import { NotesPanel } from './ui/panels/NotesPanel';
 import { DebugPanel } from './ui/panels/DebugPanel';
 import { useAppStore } from './state/store';
-import { useSettingsStore } from './state/settings';
+import { useSettingsStore, THEMES, type Theme } from './state/settings';
 
 type RightPanel = 'heatmap' | 'hotkeys' | 'macro' | 'notes' | 'debug' | null;
 type View = 'replay' | 'analysis' | 'stats';
@@ -26,7 +26,7 @@ function App() {
   const loading = useAppStore((s) => s.loading);
   const error = useAppStore((s) => s.error);
   const theme = useSettingsStore((s) => s.theme);
-  const cycleTheme = useSettingsStore((s) => s.cycleTheme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
   const [rightPanel, setRightPanel] = useState<RightPanel>('heatmap');
   const [view, setView] = useState<View>('replay');
 
@@ -70,7 +70,7 @@ function App() {
             ))}
           </div>
         )}
-        <div className="flex items-stretch">
+        <div className="ml-3 flex items-stretch">
           {(['replay', 'analysis', 'stats'] as const).map((v) => (
             <button
               key={v}
@@ -92,13 +92,27 @@ function App() {
             </button>
           ))}
         </div>
-        <button
-          onClick={cycleTheme}
-          className="border-l border-[var(--color-border)] px-3 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] hover:text-[var(--color-text-h)]"
-          title={`Theme: ${theme}. Click to cycle (default → terran → protoss → zerg)`}
-        >
-          {theme}
-        </button>
+        <div className="ml-3 flex items-center pr-3">
+          <label
+            className="mr-1 text-[10px] uppercase tracking-wide text-[var(--color-muted)]"
+            htmlFor="theme-select"
+            title="App color theme"
+          >
+            Theme
+          </label>
+          <select
+            id="theme-select"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as Theme)}
+            className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-h)] focus:border-[var(--color-accent)] focus:outline-none"
+          >
+            {THEMES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
       </header>
 
       <main className="grid min-h-0 grid-cols-[280px_1fr]">

@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { listLibrary, getCachedReplay, touchLibraryEntry, deleteLibraryEntry, type LibraryEntry } from '../storage/db';
 import { useAppStore } from '../state/store';
 import { cleanBwString, formatMMSS, frameToSeconds } from '../types/replay';
+import { useIngest } from '../storage/useIngest';
+import { supportsFolderPicker } from '../storage/ingest';
 
 type SortKey = 'recent' | 'longest' | 'map' | 'annotated';
 
@@ -16,6 +18,9 @@ export function Library() {
   const [search, setSearch] = useState('');
   const [matchup, setMatchup] = useState<string>('');
   const [sort, setSort] = useState<SortKey>('recent');
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { onDrop, onPickFiles, onPickFolder } = useIngest();
 
   const onOpen = async (hash: string, name: string, path: string | undefined) => {
     const replay = await getCachedReplay(hash);
@@ -82,8 +87,57 @@ export function Library() {
     );
   }
 
+  const addControls = (
+    <div className="flex items-stretch gap-1">
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-h)]"
+        title="Add .rep files or a .zip replay pack"
+      >
+        + Files
+      </button>
+      {supportsFolderPicker() && (
+        <button
+          onClick={onPickFolder}
+          className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-text-h)]"
+          title="Add a folder of replays"
+        >
+          + Folder
+        </button>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        multiple
+        accept=".rep,.zip"
+        onChange={onPickFiles}
+      />
+    </div>
+  );
+
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className={`relative flex h-full flex-col ${
+        dragOver ? 'ring-2 ring-inset ring-[var(--color-accent)]' : ''
+      }`}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        // Only clear when leaving the container itself, not its children.
+        if (e.currentTarget === e.target) setDragOver(false);
+      }}
+      onDrop={async (ev) => {
+        setDragOver(false);
+        await onDrop(ev);
+      }}
+    >
       <div className="flex flex-col gap-1 border-b border-[var(--color-border)] px-2 py-2">
         <input
           type="search"
@@ -116,6 +170,7 @@ export function Library() {
             <option value="map">Map A–Z</option>
           </select>
         </div>
+        {addControls}
         <div className="text-[10px] text-[var(--color-muted)]">
           {filtered.length} / {entries.length}
         </div>

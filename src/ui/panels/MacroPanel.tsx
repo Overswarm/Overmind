@@ -133,8 +133,10 @@ export function MacroPanel() {
           );
         })}
         <div className="mt-3 border-t border-[var(--color-border)] pt-2 text-[10px] leading-relaxed text-[var(--color-muted)]">
-          Supply blocks and idle rates are <b>approximations</b>. Unit deaths
-          aren't tracked, so late-game numbers over-estimate usage.
+          Supply blocks and idle rates are <b>approximations</b>. Idle capacity
+          is measured only up to your last production event (+ a short grace)
+          so post-decided tail time doesn't inflate numbers. Zerg larva regen
+          and unit deaths aren't simulated.
         </div>
       </div>
     </div>

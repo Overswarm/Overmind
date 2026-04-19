@@ -11,6 +11,9 @@ import { computeHeatmap, type HeatmapGrid, type HeatmapMode } from './heatmap';
 import { computeHotkeyStats, type HotkeyStats } from './hotkeys';
 import { computeSupplyBlocks, type SupplyBlocks } from './supplyBlocks';
 import { computeProductionIdle, type ProductionIdle } from './productionIdle';
+import { digestReplay, type ReplayDigest } from './aggregate';
+import { detectMistakes, type PlayerCoaching } from './coaching';
+import type { LibraryEntry } from '../storage/db';
 
 interface Entry {
   hash: string;
@@ -21,6 +24,9 @@ interface Entry {
   hotkeys?: HotkeyStats;
   supplyBlocks?: SupplyBlocks;
   productionIdle?: ProductionIdle;
+  digest?: ReplayDigest;
+  digestIdentityKey?: string;
+  coaching?: PlayerCoaching[];
 }
 
 // LRU-1: BW replays are large and there's only one active one at a time, so a
@@ -77,6 +83,55 @@ export function cachedProductionIdle(hash: string, replay: ParsedReplay): Produc
     e.productionIdle = computeProductionIdle(events, pids, total);
   }
   return e.productionIdle;
+}
+
+// Build a ReplayDigest for the currently-loaded replay without requiring a
+// full LibraryEntry lookup. The panels only need the digest's in-memory shape
+// (players, durations, timings); a partial entry is sufficient. `identities`
+// is included in the cache key so toggling me-tags re-digests.
+export function cachedDigest(
+  hash: string,
+  replay: ParsedReplay,
+  name: string,
+  identities: string[] = [],
+  entryOverrides?: Partial<LibraryEntry>,
+): ReplayDigest {
+  const e = entryFor(hash);
+  const key = identities.map((s) => s.trim().toLowerCase()).sort().join('|');
+  if (!e.digest || e.digestIdentityKey !== key) {
+    const stub: LibraryEntry = {
+      hash,
+      name,
+      size: 0,
+      addedAt: 0,
+      ...entryOverrides,
+    };
+    e.digest = digestReplay(stub, replay, identities);
+    e.digestIdentityKey = key;
+    // Coaching depends on the digest — invalidate so it re-runs.
+    e.coaching = undefined;
+  }
+  return e.digest;
+}
+
+export function cachedCoaching(
+  hash: string,
+  replay: ParsedReplay,
+  name: string,
+  identities: string[] = [],
+  entryOverrides?: Partial<LibraryEntry>,
+): PlayerCoaching[] {
+  const e = entryFor(hash);
+  const digest = cachedDigest(hash, replay, name, identities, entryOverrides);
+  if (!e.coaching) {
+    e.coaching = detectMistakes({
+      digest,
+      events: cachedBuildOrder(hash, replay),
+      supplyBlocks: cachedSupplyBlocks(hash, replay),
+      productionIdle: cachedProductionIdle(hash, replay),
+    });
+  }
+  return e.coaching;
 }
 
 export function cachedHeatmap(hash: string, replay: ParsedReplay, mode: HeatmapMode): HeatmapGrid {

@@ -13,13 +13,14 @@ import { ChatPanel } from './ui/panels/ChatPanel';
 import { HeatmapPanel } from './ui/panels/HeatmapPanel';
 import { HotkeyPanel } from './ui/panels/HotkeyPanel';
 import { MacroPanel } from './ui/panels/MacroPanel';
+import { CoachPanel } from './ui/panels/CoachPanel';
 import { NotesPanel } from './ui/panels/NotesPanel';
 import { DebugPanel } from './ui/panels/DebugPanel';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 import { useAppStore } from './state/store';
 import { useSettingsStore, THEMES, type Theme } from './state/settings';
 
-type RightPanel = 'heatmap' | 'hotkeys' | 'macro' | 'notes' | 'debug' | null;
+type RightPanel = 'heatmap' | 'hotkeys' | 'macro' | 'coach' | 'notes' | 'debug' | null;
 type View = 'replay' | 'analysis' | 'stats';
 
 function App() {
@@ -75,7 +76,7 @@ function App() {
         </div>
         {active && view === 'replay' && (
           <div className="flex items-stretch">
-            {(['heatmap', 'hotkeys', 'macro', 'notes', 'debug'] as const).map((key) => (
+            {(['heatmap', 'hotkeys', 'macro', 'coach', 'notes', 'debug'] as const).map((key) => (
               <button
                 key={key}
                 onClick={() => setRightPanel((cur) => (cur === key ? null : key))}
@@ -91,9 +92,11 @@ function App() {
                       ? 'Toggle control-group analytics'
                       : key === 'macro'
                         ? 'Toggle supply-block & production-idle analysis'
-                        : key === 'notes'
-                          ? 'Toggle per-replay notes'
-                          : 'Toggle raw screp output'
+                        : key === 'coach'
+                          ? 'Toggle coaching callouts (mistake detection)'
+                          : key === 'notes'
+                            ? 'Toggle per-replay notes'
+                            : 'Toggle raw screp output'
                 }
               >
                 {key}
@@ -193,6 +196,11 @@ function App() {
                 {rightPanel === 'macro' && (
                   <div className="col-span-4 row-span-3">
                     <MacroPanel />
+                  </div>
+                )}
+                {rightPanel === 'coach' && (
+                  <div className="col-span-4 row-span-3">
+                    <CoachPanel />
                   </div>
                 )}
                 {rightPanel === 'notes' && (

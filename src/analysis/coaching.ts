@@ -14,7 +14,7 @@
 import type { BuildOrderEvent } from './buildOrder';
 import type { ReplayDigest, PlayerDigest } from './aggregate';
 import type { SupplyBlocks } from './supplyBlocks';
-import type { ProductionIdle, PoolStats } from './productionIdle';
+import type { ProductionIdle } from './productionIdle';
 
 export type CalloutSeverity = 'info' | 'minor' | 'major';
 

@@ -128,7 +128,6 @@ export function cachedCoaching(
       digest,
       events: cachedBuildOrder(hash, replay),
       supplyBlocks: cachedSupplyBlocks(hash, replay),
-      productionIdle: cachedProductionIdle(hash, replay),
     });
   }
   return e.coaching;

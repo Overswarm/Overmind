@@ -31,7 +31,7 @@ export function CoachPanel() {
   return (
     <div className="theme-panel flex h-full flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
       <div className="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-        <span>Coach · mistake callouts</span>
+        <span>Auto Coach Warnings</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
         {sorted.map((pc, i) => {
@@ -60,12 +60,12 @@ export function CoachPanel() {
                 <span className="ml-auto text-[10px] text-[var(--color-muted)]">
                   {pc.callouts.length === 0
                     ? 'clean'
-                    : `${pc.callouts.length} callout${pc.callouts.length === 1 ? '' : 's'}`}
+                    : `${pc.callouts.length} warning${pc.callouts.length === 1 ? '' : 's'}`}
                 </span>
               </div>
               {pc.callouts.length === 0 ? (
                 <div className="mt-2 text-[11px] text-[var(--color-muted)]">
-                  No major mistakes detected. Nice macro.
+                  No warnings. Clean macro.
                 </div>
               ) : (
                 <ul className="mt-2 flex flex-col gap-1.5">
@@ -78,9 +78,9 @@ export function CoachPanel() {
           );
         })}
         <div className="mt-3 border-t border-[var(--color-border)] pt-2 text-[10px] leading-relaxed text-[var(--color-muted)]">
-          Callouts are heuristic: they flag supply blocks, idle production,
-          late expansions, and late first armies against mid-ladder targets.
-          A clean game should produce zero callouts.
+          Warnings are heuristic: supply blocks, late expansion vs opponent,
+          no 3rd CC/Nexus (or 5th hatch) within 7 minutes, and slow first
+          combat unit. A clean game should produce zero warnings.
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { Library } from './ui/Library';
 import { DropZone } from './ui/DropZone';
 import { AnalysisView } from './ui/AnalysisView';
 import { StatsView } from './ui/StatsView';
+import { AchievementsView } from './ui/AchievementsView';
 import { DualTrackPanel } from './ui/panels/DualTrackPanel';
 import { BuildOrderPanel } from './ui/panels/BuildOrderPanel';
 import { RosterPanel } from './ui/panels/RosterPanel';
@@ -21,7 +22,7 @@ import { useAppStore } from './state/store';
 import { useSettingsStore, THEMES, type Theme } from './state/settings';
 
 type RightPanel = 'heatmap' | 'hotkeys' | 'macro' | 'coach' | 'notes' | 'debug' | null;
-type View = 'replay' | 'analysis' | 'stats';
+type View = 'replay' | 'analysis' | 'stats' | 'achievements';
 
 function App() {
   const active = useAppStore((s) => s.active);
@@ -60,6 +61,7 @@ function App() {
       if (e.key === '1') setView('replay');
       else if (e.key === '2') setView('analysis');
       else if (e.key === '3') setView('stats');
+      else if (e.key === '4') setView('achievements');
       else if (e.key === 't' || e.key === 'T') cycleTheme();
       else return;
       e.preventDefault();
@@ -93,7 +95,7 @@ function App() {
                       : key === 'macro'
                         ? 'Toggle supply-block & production-idle analysis'
                         : key === 'coach'
-                          ? 'Toggle coaching callouts (mistake detection)'
+                          ? 'Toggle Auto Coach Warnings'
                           : key === 'notes'
                             ? 'Toggle per-replay notes'
                             : 'Toggle raw screp output'
@@ -104,8 +106,14 @@ function App() {
             ))}
           </div>
         )}
-        <div className="ml-3 flex items-stretch">
-          {(['replay', 'analysis', 'stats'] as const).map((v) => (
+        {/* Gap between the per-replay panel toggles (left group) and the
+            app-level view controls (right group). Roughly one button wide so
+            the two sets read as separate instead of one run of pills. */}
+        {active && view === 'replay' && (
+          <div className="w-12 shrink-0" aria-hidden />
+        )}
+        <div className="flex items-stretch">
+          {(['replay', 'analysis', 'stats', 'achievements'] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -119,7 +127,9 @@ function App() {
                   ? 'Per-replay analysis (1)'
                   : v === 'analysis'
                     ? 'Aggregate analysis across your library (2)'
-                    : 'Fun factoids and career records (3)'
+                    : v === 'stats'
+                      ? 'Fun factoids and career records (3)'
+                      : 'Library-wide achievements (4)'
               }
             >
               {v}
@@ -167,6 +177,10 @@ function App() {
           ) : view === 'stats' ? (
             <ErrorBoundary label="Stats view">
               <StatsView />
+            </ErrorBoundary>
+          ) : view === 'achievements' ? (
+            <ErrorBoundary label="Achievements view">
+              <AchievementsView />
             </ErrorBoundary>
           ) : !active ? (
             <div className="mx-auto max-w-2xl">

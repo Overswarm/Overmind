@@ -128,6 +128,7 @@ export function cachedCoaching(
       digest,
       events: cachedBuildOrder(hash, replay),
       supplyBlocks: cachedSupplyBlocks(hash, replay),
+      timeSeries: cachedTimeSeries(hash, replay),
     });
   }
   return e.coaching;

@@ -16,6 +16,7 @@
 import type { BuildOrderEvent } from './buildOrder';
 import type { ReplayDigest, PlayerDigest } from './aggregate';
 import type { SupplyBlocks } from './supplyBlocks';
+import type { DualTrackSeries } from './timeseries';
 
 export type CalloutSeverity = 'info' | 'minor' | 'major';
 
@@ -28,7 +29,9 @@ export interface Callout {
     | 'lateExpo'
     | 'noExpo'
     | 'lateThirdBase'
-    | 'lateArmy';
+    | 'lateArmy'
+    | 'mineralFloat'
+    | 'gasFloat';
   severity: CalloutSeverity;
   title: string;
   detail: string;
@@ -68,6 +71,18 @@ const LATE_ARMY_MAJOR_SEC = 150;
 // the Zerg equivalent from the 3rd hatch to the 5th).
 const LATE_THIRD_BASE_GAP_SEC = 7 * 60;
 
+// Resource-float thresholds. A single sampled tick over the line doesn't fire
+// — we require FLOAT_SUSTAIN_SEC of sustained "above threshold" before the
+// warning kicks in, to suppress transient spikes the moment before a big buy.
+// These work off the ESTIMATED mineral/gas series from timeseries.ts, so the
+// detail copy notes "estimated" to set expectations.
+const MINERAL_FLOAT_THRESHOLD = 1000;
+const GAS_FLOAT_THRESHOLD = 500;
+const FLOAT_SUSTAIN_SEC = 30;
+// Skip the opening — before ~90s there's no production to spend on yet and
+// every race floats by definition while SCVs / Probes / Drones warm up.
+const FLOAT_WARMUP_SEC = 90;
+
 const FRAMES_PER_SECOND = 1000 / 42;
 
 // Town hall IDs per race, used to locate the Nth expansion event. Terran and
@@ -84,6 +99,9 @@ export interface DetectContext {
   digest: ReplayDigest;
   events: BuildOrderEvent[];
   supplyBlocks: SupplyBlocks;
+  // Optional because older call sites may not plumb it through; the resource
+  // detectors simply skip if missing.
+  timeSeries?: DualTrackSeries;
 }
 
 export function detectMistakes(ctx: DetectContext): PlayerCoaching[] {
@@ -161,6 +179,14 @@ function detectForPlayer(ctx: DetectContext, p: PlayerDigest): Callout[] {
   // --- late third base / fifth hatch ----------------------------------------
   const lateBase = detectLateThirdBase(ctx, p);
   if (lateBase) out.push(lateBase);
+
+  // --- resource floats (minerals / gas) -------------------------------------
+  if (ctx.timeSeries) {
+    const mineralFloat = detectFloat(ctx.timeSeries, p.playerID, 'minerals');
+    if (mineralFloat) out.push(mineralFloat);
+    const gasFloat = detectFloat(ctx.timeSeries, p.playerID, 'gas');
+    if (gasFloat) out.push(gasFloat);
+  }
 
   // --- no / late first combat unit ------------------------------------------
   const armyTarget = FIRST_ARMY_TARGET_SECONDS[p.race];
@@ -240,6 +266,66 @@ function detectLateThirdBase(ctx: DetectContext, p: PlayerDigest): Callout | nul
     title: label.title,
     detail: `You spent 7 minutes or more after your ${label.ord} without making a ${label.next}.`,
     frame: hallBuilds[triggerIdx].frame,
+  };
+}
+
+// Find the longest stretch where the player's estimated mineral/gas balance
+// stayed above the float threshold. Emits a callout only if the longest run
+// reaches FLOAT_SUSTAIN_SEC — brief spikes right before a buy don't count.
+function detectFloat(
+  series: DualTrackSeries,
+  playerID: number,
+  resource: 'minerals' | 'gas',
+): Callout | null {
+  const s = series.players.find((p) => p.playerID === playerID);
+  if (!s) return null;
+  const threshold = resource === 'minerals' ? MINERAL_FLOAT_THRESHOLD : GAS_FLOAT_THRESHOLD;
+  const label = resource === 'minerals' ? 'minerals' : 'gas';
+
+  const xs = series.timeSeconds;
+  const values = s[resource];
+  let runStart = -1;
+  let bestStart = -1;
+  let bestEnd = -1;
+  let bestPeak = 0;
+  for (let i = 0; i < xs.length; i++) {
+    if (xs[i] < FLOAT_WARMUP_SEC) {
+      runStart = -1;
+      continue;
+    }
+    if (values[i] >= threshold) {
+      if (runStart < 0) runStart = i;
+      const peak = values[i];
+      if (i - runStart > bestEnd - bestStart) {
+        bestStart = runStart;
+        bestEnd = i;
+        bestPeak = Math.max(bestPeak, peak);
+      } else if (peak > bestPeak && i >= bestStart && i <= bestEnd) {
+        bestPeak = peak;
+      }
+    } else {
+      runStart = -1;
+    }
+  }
+
+  if (bestStart < 0 || bestEnd < 0) return null;
+  const sustain = xs[bestEnd] - xs[bestStart];
+  if (sustain < FLOAT_SUSTAIN_SEC) return null;
+
+  // Severity: minor at the threshold, major at 1.5× it.
+  const severity: CalloutSeverity = bestPeak >= threshold * 1.5 ? 'major' : 'minor';
+  const id = resource === 'minerals' ? 'mineralFloat' : 'gasFloat';
+  const kind: Callout['kind'] = resource === 'minerals' ? 'mineralFloat' : 'gasFloat';
+
+  return {
+    id,
+    kind,
+    severity,
+    title: resource === 'minerals' ? 'Floating minerals' : 'Floating gas',
+    detail: `Est. ${label} stayed above ${threshold} for ${Math.round(sustain)}s (peaked ~${bestPeak}) starting at ${formatClock(
+      xs[bestStart],
+    )}. Spend your bank — more production, expansions, or upgrades.`,
+    frame: Math.round(xs[bestStart] * FRAMES_PER_SECOND),
   };
 }
 

@@ -17,6 +17,33 @@ import { unitMeta } from './units';
 // the frame-by-frame noise that makes raw commands-per-second unreadable.
 const APM_WINDOW_SECONDS = 30;
 
+// Resource estimation. BW replays are command streams — there is no
+// authoritative mineral / gas series. These curves are a simulation:
+//   balance(t) = start + Σ income(w, t) − Σ spend(e, t)
+// where income uses nominal BW mining rates and a worker-allocation model that
+// saturates gas (3 per extractor) first, then minerals (up to 16 per base).
+// Over-saturation, unit deaths, cancels, and worker losses are not modeled,
+// so the estimate drifts optimistic on games with heavy combat. The numbers
+// are still useful for spotting sustained floats ("you sat on 1500 minerals
+// for a minute") — which was the motivating coaching ask.
+const MINERAL_RATE_PER_WORKER_PER_SEC = 0.8;   // ~48 minerals/min, avg close+far
+const GAS_RATE_PER_WORKER_PER_SEC = 1.67;      // ~100 gas/min per gas worker
+const GAS_WORKERS_PER_EXTRACTOR = 3;
+const MINERAL_WORKERS_PER_BASE = 16;
+const STARTING_MINERALS = 50;
+const STARTING_GAS = 0;
+const STARTING_WORKERS = 4;
+const STARTING_BASES = 1;
+const WORKER_TRAIN_FRAMES = 300;               // ~12.6s for SCV/Probe/Drone
+// How long a gas extractor / town hall takes to come online. Matches
+// CAP_PROVIDER_COMPLETION_FRAMES for the town halls.
+const GAS_BUILDING_COMPLETION_FRAMES = 600;    // ~25s
+
+const GAS_BUILDING_IDS = new Set<number>([0x6e, 0x95, 0x9d]);
+// Brand-new town halls only — Lair (0x84) and Hive (0x85) morph an existing
+// Hatchery, so they don't add another mineral line.
+const NEW_TOWN_HALL_IDS = new Set<number>([0x6a, 0x9a, 0x83]);
+
 // Supply cap from each provider (display units). Lair/Hive aren't here: the
 // base Hatchery already counts and those morphs don't add more.
 const CAP_PROVIDER_SUPPLY: Record<number, number> = {
@@ -54,6 +81,12 @@ export interface PlayerSeries {
   spent: number[];              // Cumulative mineral + gas committed to all units and buildings
   apm: number[];                // Rolling actions-per-minute (all commands)
   eapm: number[];               // Rolling effective-actions-per-minute (screp's isEffective filter)
+  // Estimated live resource balance (see "Resource estimation" header comment).
+  minerals: number[];
+  gas: number[];
+  // Per-minute mining rate at each tick (mineral/gas workers × nominal rate).
+  mineralIncome: number[];
+  gasIncome: number[];
 }
 
 export interface DualTrackSeries {
@@ -87,6 +120,10 @@ export function computeTimeSeries(
       spent: new Array(xs.length).fill(0),
       apm: new Array(xs.length).fill(0),
       eapm: new Array(xs.length).fill(0),
+      minerals: new Array(xs.length).fill(0),
+      gas: new Array(xs.length).fill(0),
+      mineralIncome: new Array(xs.length).fill(0),
+      gasIncome: new Array(xs.length).fill(0),
     });
   }
 
@@ -155,6 +192,94 @@ export function computeTimeSeries(
     ffill(s.armyValue);
     ffill(s.spent);
     // supplyCap is already monotonic via direct writes, no ffill needed.
+  }
+
+  // ---- Resource estimation (minerals / gas / income) -----------------------
+  // For each player, bucket worker-ready events, spend events, and gas/base
+  // completions into the x-axis grid, then walk once to simulate balances.
+  // We prefer to saturate gas (3 per extractor) before putting workers on
+  // minerals, matching how most players run their economy once gas goes down.
+  for (const p of players) {
+    const s = seriesByPID.get(p.ID);
+    if (!s) continue;
+    const isZerg = (p.Race?.ShortName ?? '').toLowerCase().startsWith('z');
+
+    const workerReady = new Int32Array(xs.length);
+    const mineralSpend = new Float64Array(xs.length);
+    const gasSpend = new Float64Array(xs.length);
+    const gasOnline = new Int32Array(xs.length);
+    const basesOnline = new Int32Array(xs.length);
+
+    for (const e of events) {
+      if (e.playerID !== p.ID) continue;
+      const meta = e.unitID !== undefined ? unitMeta(e.unitID) : undefined;
+      if (!meta) continue;
+      const count = meta.perMorph ?? 1;
+      const evIdx = Math.min(xs.length - 1, Math.floor(e.seconds / stepSeconds));
+      if (e.kind === 'train' || e.kind === 'morph' || e.kind === 'build' || e.kind === 'buildingMorph') {
+        mineralSpend[evIdx] += meta.mineral * count;
+        gasSpend[evIdx] += meta.gas * count;
+      }
+      if ((e.kind === 'train' || e.kind === 'morph') && meta.isWorker) {
+        // Workers only start mining once training completes; bump at that tick.
+        const readySec = e.seconds + WORKER_TRAIN_FRAMES / fps;
+        const ri = Math.min(xs.length - 1, Math.floor(readySec / stepSeconds));
+        if (ri >= 0) workerReady[ri] += count;
+      }
+      if ((e.kind === 'build' || e.kind === 'buildingMorph') && e.unitID !== undefined) {
+        // Zerg buildings morph from a Drone, so the drone is consumed the
+        // moment the build order fires. Decrement workers immediately.
+        if (isZerg && e.kind === 'build') {
+          workerReady[evIdx] -= 1;
+        }
+        if (GAS_BUILDING_IDS.has(e.unitID)) {
+          const readySec = e.seconds + GAS_BUILDING_COMPLETION_FRAMES / fps;
+          const ri = Math.min(xs.length - 1, Math.floor(readySec / stepSeconds));
+          if (ri >= 0 && readySec <= totalSeconds) gasOnline[ri] += 1;
+        }
+        if (NEW_TOWN_HALL_IDS.has(e.unitID)) {
+          const readySec = e.seconds + (CAP_PROVIDER_COMPLETION_FRAMES[e.unitID] ?? 1800) / fps;
+          const ri = Math.min(xs.length - 1, Math.floor(readySec / stepSeconds));
+          if (ri >= 0 && readySec <= totalSeconds) basesOnline[ri] += 1;
+        }
+      }
+    }
+
+    let minerals = STARTING_MINERALS;
+    let gas = STARTING_GAS;
+    let workers = STARTING_WORKERS;
+    let bases = STARTING_BASES;
+    let extractors = 0;
+
+    for (let i = 0; i < xs.length; i++) {
+      workers += workerReady[i];
+      if (workers < 0) workers = 0;
+      bases += basesOnline[i];
+      extractors += gasOnline[i];
+
+      // Allocate: saturate gas first (up to 3 per extractor), then minerals
+      // up to 16 per base. Anything beyond that is modeled as unproductive
+      // (over-saturated minerals or unassigned workers).
+      const gasCap = extractors * GAS_WORKERS_PER_EXTRACTOR;
+      const gasW = Math.min(gasCap, workers);
+      const mineralW = Math.min(Math.max(0, workers - gasW), bases * MINERAL_WORKERS_PER_BASE);
+
+      const mineralIncomePerSec = mineralW * MINERAL_RATE_PER_WORKER_PER_SEC;
+      const gasIncomePerSec = gasW * GAS_RATE_PER_WORKER_PER_SEC;
+
+      minerals += mineralIncomePerSec * stepSeconds - mineralSpend[i];
+      gas += gasIncomePerSec * stepSeconds - gasSpend[i];
+      // Spends that outpace income in the same tick shouldn't push the
+      // simulated balance negative — in-game, the player had to wait for the
+      // next tick's income to afford it. Clamp at 0 to avoid scary dips.
+      if (minerals < 0) minerals = 0;
+      if (gas < 0) gas = 0;
+
+      s.minerals[i] = Math.round(minerals);
+      s.gas[i] = Math.round(gas);
+      s.mineralIncome[i] = Math.round(mineralIncomePerSec * 60);
+      s.gasIncome[i] = Math.round(gasIncomePerSec * 60);
+    }
   }
 
   // APM / EAPM: scan the raw command array once, bucket per-player per-second

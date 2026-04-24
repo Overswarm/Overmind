@@ -86,8 +86,10 @@ export function CoachPanel() {
         })}
         <div className="mt-3 border-t border-[var(--color-border)] pt-2 text-[10px] leading-relaxed text-[var(--color-muted)]">
           Warnings are heuristic: supply blocks, late expansion vs opponent,
-          no 3rd CC/Nexus (or 5th hatch) within 7 minutes, and slow first
-          combat unit. A clean game should produce zero warnings.
+          no 3rd CC/Nexus (or 5th hatch) within 7 minutes, slow first combat
+          unit, and sustained mineral / gas floats. Resource numbers are
+          estimated (BW replays don't record exact totals). A clean game
+          should produce zero warnings.
         </div>
       </div>
     </div>

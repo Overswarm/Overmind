@@ -12,7 +12,18 @@ import {
   playerSlotMap,
 } from '../playerColor';
 
-type Metric = 'workersProduced' | 'supplyProduced' | 'supplyCap' | 'armyValue' | 'spent' | 'apm' | 'eapm';
+type Metric =
+  | 'workersProduced'
+  | 'supplyProduced'
+  | 'supplyCap'
+  | 'armyValue'
+  | 'spent'
+  | 'minerals'
+  | 'gas'
+  | 'mineralIncome'
+  | 'gasIncome'
+  | 'apm'
+  | 'eapm';
 
 interface UpgradeTick {
   seconds: number;
@@ -28,6 +39,10 @@ const METRIC_LABELS: Record<Metric, string> = {
   supplyCap: 'Supply cap',
   armyValue: 'Army value (min+gas)',
   spent: 'Total resources spent (min+gas)',
+  minerals: 'Minerals (est.)',
+  gas: 'Gas (est.)',
+  mineralIncome: 'Mineral income (per min, est.)',
+  gasIncome: 'Gas income (per min, est.)',
   apm: 'APM (rolling 30s)',
   eapm: 'EAPM (rolling 30s)',
 };

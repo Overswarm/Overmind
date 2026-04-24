@@ -116,6 +116,15 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
   // Per-player per-unit last-accepted-frame for the production-budget filter.
   // Keyed by `${pid}::${unitId}`.
   const lastAccepted = new Map<string, number>();
+  // Tech / upgrade dedup. Each tech is 1-shot per player (Stim Packs, Siege,
+  // Cloaking, Lurker Aspect, etc.) — spam-clicks on the research button
+  // otherwise emit a row per click. Upgrades cap at level 3 (+1/+2/+3 for
+  // weapons/armor/shields/carapace); non-stackable upgrades also exist but
+  // capping at 3 is good enough to collapse visible spam without a full
+  // stackable-upgrade registry.
+  const techResearched = new Set<string>();       // `${pid}::${name}`
+  const upgradeLevels = new Map<string, number>(); // `${pid}::${name}` → level already accepted
+  const MAX_UPGRADE_LEVELS = 3;
   // Per-player count of started production structures (Build or BuildingMorph
   // completion is ignored — queueing counts, which matches how players think
   // about builds in progress). Keyed by `${pid}::${buildingID}`.
@@ -211,12 +220,19 @@ export function computeBuildOrder(replay: ParsedReplay): BuildOrderEvent[] {
       case TYPE_NAMES.tech: {
         const name = cmdTechName(c);
         if (!name) break;
+        const key = `${pid}::${name}`;
+        if (techResearched.has(key)) break;
+        techResearched.add(key);
         out.push({ frame, seconds, playerID: pid, kind: 'tech', name, supply, workers });
         break;
       }
       case TYPE_NAMES.upgrade: {
         const name = cmdUpgradeName(c);
         if (!name) break;
+        const key = `${pid}::${name}`;
+        const level = upgradeLevels.get(key) ?? 0;
+        if (level >= MAX_UPGRADE_LEVELS) break;
+        upgradeLevels.set(key, level + 1);
         out.push({ frame, seconds, playerID: pid, kind: 'upgrade', name, supply, workers });
         break;
       }

@@ -12,7 +12,10 @@ import {
   type AchievementCategory,
   type AchievementsResult,
 } from '../analysis/achievements';
+import { useAppStore } from '../state/store';
 import { useSettingsStore } from '../state/settings';
+
+type Scope = 'all' | 'game';
 
 const CATEGORY_ORDER: AchievementCategory[] = [
   'terran',
@@ -49,6 +52,8 @@ export function AchievementsView() {
   const [digests, setDigests] = useState<ReplayDigest[]>([]);
   const [loading, setLoading] = useState(true);
   const [showLocked, setShowLocked] = useState(true);
+  const [scope, setScope] = useState<Scope>('all');
+  const active = useAppStore((s) => s.active);
   const identities = useSettingsStore((s) => s.identities);
   const addIdentity = useSettingsStore((s) => s.addIdentity);
   const removeIdentity = useSettingsStore((s) => s.removeIdentity);
@@ -77,9 +82,27 @@ export function AchievementsView() {
     return () => { cancelled = true; };
   }, [identities]);
 
+  // Game scope is only meaningful when a replay is loaded. Fall back to all.
+  const effectiveScope: Scope = scope === 'game' && active ? 'game' : 'all';
+
+  // When scoped to a single game we pass a one-element library to
+  // computeAchievements so library-wide achievements (10 replays, 10 hours)
+  // show progress against the single game rather than the whole library.
+  const { scopedDigests, scopedEntries } = useMemo(() => {
+    if (effectiveScope !== 'game' || !active) {
+      return { scopedDigests: digests, scopedEntries: entries };
+    }
+    const entry = entries.find((e) => e.hash === active.hash);
+    const digest = digests.find((d) => d.hash === active.hash);
+    return {
+      scopedDigests: digest ? [digest] : [],
+      scopedEntries: entry ? [entry] : [],
+    };
+  }, [effectiveScope, active, entries, digests]);
+
   const result: AchievementsResult = useMemo(
-    () => computeAchievements(digests, entries),
-    [digests, entries],
+    () => computeAchievements(scopedDigests, scopedEntries),
+    [scopedDigests, scopedEntries],
   );
 
   const grouped = useMemo(() => {
@@ -94,10 +117,42 @@ export function AchievementsView() {
 
   const needsIdentity = result.needsIdentity || identities.length === 0;
 
+  const gameTitle =
+    effectiveScope === 'game' && active
+      ? active.replay.MapData?.Name || active.replay.Header?.Map || active.name
+      : null;
+
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm text-[var(--color-text-h)]">
       <div className="flex flex-wrap items-center gap-3">
         <div className="text-lg font-semibold">Achievements</div>
+        <div className="flex items-center rounded border border-[var(--color-border)] text-[10px] uppercase tracking-wide">
+          {(['all', 'game'] as const).map((s) => {
+            const disabled = s === 'game' && !active;
+            const label = s === 'all' ? 'All replays' : 'This game';
+            return (
+              <button
+                key={s}
+                onClick={() => !disabled && setScope(s)}
+                disabled={disabled}
+                title={
+                  disabled
+                    ? 'Load a replay to see per-game achievements'
+                    : s === 'all'
+                      ? 'Every replay in your library counts'
+                      : 'Only the active replay counts'
+                }
+                className={`px-2 py-0.5 ${
+                  scope === s && !disabled
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
+                } ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
         <div className="text-xs text-[var(--color-muted)]">
           {loading
             ? 'Loading…'
@@ -105,7 +160,9 @@ export function AchievementsView() {
               ? needsIdentity
                 ? 'Set your name below to start earning achievements.'
                 : 'No games to evaluate yet.'
-              : `${result.unlockedCount} / ${result.totalCount} unlocked · ${result.meGames} of your games`}
+              : effectiveScope === 'game'
+                ? `${result.unlockedCount} / ${result.totalCount} unlocked on ${gameTitle ?? 'this game'}`
+                : `${result.unlockedCount} / ${result.totalCount} unlocked · ${result.meGames} of your games`}
         </div>
         {result.totalCount > 0 && (
           <label className="ml-auto flex items-center gap-2 text-[11px] text-[var(--color-muted)]">

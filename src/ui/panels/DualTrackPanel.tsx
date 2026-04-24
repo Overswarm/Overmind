@@ -18,6 +18,7 @@ interface UpgradeTick {
   seconds: number;
   name: string;
   playerID: number;
+  playerName: string;
   kind: 'tech' | 'upgrade';
 }
 
@@ -77,12 +78,15 @@ export function DualTrackPanel() {
   // ref so the draw hook can read the latest list without rebuilding uPlot.
   const upgradeTicks = useMemo<UpgradeTick[]>(() => {
     if (!active) return [];
+    const names: Record<number, string> = {};
+    for (const p of active.replay.Header?.Players ?? []) names[p.ID] = cleanBwString(p.Name);
     return cachedBuildOrder(active.hash, active.replay)
       .filter((e) => e.kind === 'tech' || e.kind === 'upgrade')
       .map((e) => ({
         seconds: e.seconds,
         name: e.name,
         playerID: e.playerID,
+        playerName: names[e.playerID] ?? `P${e.playerID}`,
         kind: e.kind as 'tech' | 'upgrade',
       }));
   }, [active]);
@@ -90,6 +94,14 @@ export function DualTrackPanel() {
   upgradeTicksRef.current = upgradeTicks;
   const slotsRef = useRef(slots);
   slotsRef.current = slots;
+
+  // Hover-snapping tooltip for tech/upgrade markers. Populated by the uPlot
+  // cursor hook below; cleared when the cursor isn't near any tick.
+  const [hoverTip, setHoverTip] = useState<{
+    xPx: number;
+    ticks: UpgradeTick[];
+  } | null>(null);
+  const chartWrapRef = useRef<HTMLDivElement>(null);
 
   const { data, options, atCursor } = useMemo(() => {
     if (!series) return { data: null as AlignedData | null, options: null as Options | null, atCursor: [] as { name: string; value: number; color: string }[] };
@@ -127,10 +139,48 @@ export function DualTrackPanel() {
             const idx = self.cursor.idx;
             if (idx == null) {
               setHoverFrame(null);
+              setHoverTip((prev) => (prev === null ? prev : null));
               return;
             }
             const t = self.data[0]?.[idx];
             if (typeof t === 'number') setHoverFrame(t * FRAMES_PER_SECOND);
+
+            // Snap a tooltip to any tech/upgrade tick within HIT_PX of the
+            // cursor. If multiple land in the window, show them stacked.
+            const HIT_PX = 10;
+            const cursorLeft = self.cursor.left ?? -1;
+            if (cursorLeft < 0) {
+              setHoverTip((prev) => (prev === null ? prev : null));
+              return;
+            }
+            const near: UpgradeTick[] = [];
+            for (const tk of upgradeTicksRef.current) {
+              const xp = self.valToPos(tk.seconds, 'x');
+              if (Math.abs(xp - cursorLeft) <= HIT_PX) near.push(tk);
+            }
+            if (near.length === 0) {
+              setHoverTip((prev) => (prev === null ? prev : null));
+              return;
+            }
+            const wrap = chartWrapRef.current;
+            if (!wrap) return;
+            const overRect = self.over.getBoundingClientRect();
+            const wrapRect = wrap.getBoundingClientRect();
+            // Centroid of the matched ticks so the bubble anchors between
+            // clustered markers rather than flipping between them.
+            const avgSec = near.reduce((s, tk) => s + tk.seconds, 0) / near.length;
+            const xPx = overRect.left - wrapRect.left + self.valToPos(avgSec, 'x');
+            setHoverTip((prev) => {
+              if (
+                prev &&
+                prev.ticks.length === near.length &&
+                Math.abs(prev.xPx - xPx) < 1 &&
+                prev.ticks.every((pt, i) => pt.seconds === near[i].seconds && pt.name === near[i].name)
+              ) {
+                return prev;
+              }
+              return { xPx, ticks: near };
+            });
           },
         ],
         // Paint the playhead + tech/upgrade overlay last so they draw on top
@@ -267,7 +317,7 @@ export function DualTrackPanel() {
             </div>
           )}
         </div>
-        <div className="min-h-0 flex-1">
+        <div ref={chartWrapRef} className="relative min-h-0 flex-1">
           {data && options && (
             <UPlotChart
               // Rebuild the plot when theme, replay, or slot mapping change.
@@ -281,6 +331,27 @@ export function DualTrackPanel() {
                 uplotRef.current = u;
               }}
             />
+          )}
+          {hoverTip && (
+            <div
+              role="tooltip"
+              className="pointer-events-none absolute top-1 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[var(--color-border)] bg-[var(--color-bg-panel)] px-2 py-1 text-[10px] leading-tight shadow-lg"
+              style={{ left: `${hoverTip.xPx}px` }}
+            >
+              {hoverTip.ticks.map((tk, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-1.5 w-1.5 rounded-full"
+                    style={{ background: slotColor(slots.get(tk.playerID) ?? 0) }}
+                  />
+                  <span className="font-mono tabular-nums text-[var(--color-muted)]">
+                    {formatMMSS(tk.seconds)}
+                  </span>
+                  <span className="text-[var(--color-text-h)]">{tk.name}</span>
+                  <span className="text-[var(--color-muted)]">· {tk.playerName}</span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

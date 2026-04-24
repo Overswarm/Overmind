@@ -1,17 +1,20 @@
 import { useMemo } from 'react';
 import { useAppStore } from '../../state/store';
+import { useSettingsStore } from '../../state/settings';
 import { cleanBwString } from '../../types/replay';
+import { playerColorVar, playerSlotMap } from '../playerColor';
 
 export function ApmPanel() {
   const active = useAppStore((s) => s.active);
+  const identities = useSettingsStore((s) => s.identities);
 
-  const rows = useMemo(() => {
-    if (!active) return [];
+  const { rows, slots } = useMemo(() => {
+    if (!active) return { rows: [], slots: new Map<number, number>() };
     const players = active.replay.Header?.Players ?? [];
     const descs = active.replay.Computed?.PlayerDescs ?? [];
     const descByPID = new Map<number, (typeof descs)[number]>();
     for (const d of descs) descByPID.set(d.PlayerID, d);
-    return players
+    const rows = players
       .filter((p) => !p.Observer)
       .map((p) => {
         const d = descByPID.get(p.ID);
@@ -28,7 +31,8 @@ export function ApmPanel() {
           redundancy,
         };
       });
-  }, [active]);
+    return { rows, slots: playerSlotMap(players, identities) };
+  }, [active, identities]);
 
   if (!active) return null;
 
@@ -53,7 +57,7 @@ export function ApmPanel() {
                 <td className="py-1 font-sans text-[var(--color-text-h)]">
                   <span
                     className="mr-2 inline-block h-2 w-2 rounded-full align-middle"
-                    style={{ background: i === 0 ? 'var(--color-player-a)' : 'var(--color-player-b)' }}
+                    style={{ background: playerColorVar(slots.get(r.playerID) ?? i) }}
                   />
                   {r.name}
                 </td>

@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppStore } from '../state/store';
+import { useSettingsStore } from '../state/settings';
 import { cleanBwString, formatMMSS, frameToSeconds, raceLetter } from '../types/replay';
+import { playerColorVar, playerSlotMap } from './playerColor';
 
 export function MetadataHeader() {
   const active = useAppStore((s) => s.active);
+  const identities = useSettingsStore((s) => s.identities);
   const [revealOutcome, setRevealOutcome] = useState(false);
+  const slots = useMemo(
+    () => playerSlotMap(active?.replay.Header?.Players, identities),
+    [active, identities],
+  );
   if (!active) {
     return (
       <div className="flex h-14 items-center px-4 text-[var(--color-text-h)]">
@@ -98,7 +105,7 @@ export function MetadataHeader() {
             <div key={p.ID ?? i} className="flex items-center gap-1">
               <span
                 className="inline-block h-2 w-2 rounded-full"
-                style={{ background: i === 0 ? 'var(--color-player-a)' : 'var(--color-player-b)' }}
+                style={{ background: playerColorVar(slots.get(p.ID) ?? i) }}
               />
               <span className="font-mono">{raceLetter(p.Race)}</span>
               <span className="text-[var(--color-text-h)]">{cleanBwString(p.Name)}</span>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../state/store';
+import { useSettingsStore } from '../../state/settings';
 import { cleanBwString, formatMMSS } from '../../types/replay';
 import {
   buildOrderToCsv,
@@ -8,6 +9,7 @@ import {
   type BuildOrderEvent,
 } from '../../analysis/buildOrder';
 import { cachedBuildOrder } from '../../analysis/cache';
+import { playerColorVar, playerSlotMap } from '../playerColor';
 
 const KIND_LABELS: Record<BuildOrderEvent['kind'], string> = {
   train: 'train',
@@ -34,6 +36,7 @@ export function BuildOrderPanel() {
   const currentFrame = useAppStore((s) => s.currentFrame);
   const hoverFrame = useAppStore((s) => s.hoverFrame);
   const setFrame = useAppStore((s) => s.setFrame);
+  const identities = useSettingsStore((s) => s.identities);
   const listRef = useRef<HTMLDivElement>(null);
   // null = show all players; a number selects a single PID.
   const [filterPID, setFilterPID] = useState<number | null>(null);
@@ -44,6 +47,11 @@ export function BuildOrderPanel() {
       .filter((p) => !p.Observer)
       .map((p) => ({ id: p.ID, name: cleanBwString(p.Name) }));
   }, [active]);
+
+  const slots = useMemo(
+    () => playerSlotMap(active?.replay.Header?.Players, identities),
+    [active, identities],
+  );
 
   // Reset filter when the active replay changes so we don't carry a stale PID.
   useEffect(() => {
@@ -141,7 +149,7 @@ export function BuildOrderPanel() {
               >
                 <span
                   className="inline-block h-2 w-2 rounded-full"
-                  style={{ background: i === 0 ? 'var(--color-player-a)' : 'var(--color-player-b)' }}
+                  style={{ background: playerColorVar(slots.get(p.id) ?? i) }}
                 />
                 <span className="max-w-[10ch] truncate normal-case">{p.name}</span>
               </button>

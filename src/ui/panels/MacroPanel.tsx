@@ -1,17 +1,21 @@
 import { useMemo } from 'react';
 import { useAppStore } from '../../state/store';
+import { useSettingsStore } from '../../state/settings';
 import { cachedSupplyBlocks, cachedProductionIdle } from '../../analysis/cache';
 import { cleanBwString, formatMMSS, FRAMES_PER_SECOND } from '../../types/replay';
+import { playerColorVar, playerSlotMap } from '../playerColor';
 
 export function MacroPanel() {
   const active = useAppStore((s) => s.active);
   const setFrame = useAppStore((s) => s.setFrame);
+  const identities = useSettingsStore((s) => s.identities);
 
-  const { supplyBlocks, productionIdle, players } = useMemo(() => {
+  const { supplyBlocks, productionIdle, players, slots } = useMemo(() => {
     if (!active) {
       return {
         supplyBlocks: null, productionIdle: null,
         players: [] as { id: number; name: string }[],
+        slots: new Map<number, number>(),
       };
     }
     const sb = cachedSupplyBlocks(active.hash, active.replay);
@@ -21,8 +25,9 @@ export function MacroPanel() {
       if (p.Observer) continue;
       plist.push({ id: p.ID, name: cleanBwString(p.Name) });
     }
-    return { supplyBlocks: sb, productionIdle: pi, players: plist };
-  }, [active]);
+    const slots = playerSlotMap(active.replay.Header?.Players, identities);
+    return { supplyBlocks: sb, productionIdle: pi, players: plist, slots };
+  }, [active, identities]);
 
   if (!active || !supplyBlocks || !productionIdle) return null;
 
@@ -45,7 +50,7 @@ export function MacroPanel() {
               <div className="flex items-center gap-2">
                 <span
                   className="inline-block h-2 w-2 rounded-full"
-                  style={{ background: i === 0 ? 'var(--color-player-a)' : 'var(--color-player-b)' }}
+                  style={{ background: playerColorVar(slots.get(p.id) ?? i) }}
                 />
                 <span className="truncate font-semibold text-[var(--color-text-h)]">{p.name}</span>
               </div>

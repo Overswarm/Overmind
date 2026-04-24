@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { useAppStore } from '../../state/store';
+import { useSettingsStore } from '../../state/settings';
 import { cleanBwString } from '../../types/replay';
 import { cachedBuildOrder } from '../../analysis/cache';
 import { computeRoster, type RosterForPlayer, type RosterRole } from '../../analysis/roster';
+import { playerColorVar, playerSlotMap } from '../playerColor';
 
 const ROLE_ORDER: RosterRole[] = ['worker', 'army', 'building'];
 const ROLE_LABEL: Record<RosterRole, string> = {
@@ -14,16 +16,23 @@ const ROLE_LABEL: Record<RosterRole, string> = {
 export function RosterPanel() {
   const active = useAppStore((s) => s.active);
   const currentFrame = useAppStore((s) => s.currentFrame);
+  const identities = useSettingsStore((s) => s.identities);
 
-  const { players, rosters } = useMemo(() => {
-    if (!active) return { players: [] as { id: number; name: string }[], rosters: new Map<number, RosterForPlayer>() };
+  const { players, rosters, slots } = useMemo(() => {
+    if (!active)
+      return {
+        players: [] as { id: number; name: string }[],
+        rosters: new Map<number, RosterForPlayer>(),
+        slots: new Map<number, number>(),
+      };
     const events = cachedBuildOrder(active.hash, active.replay);
     const rosters = computeRoster(events, currentFrame);
     const players = (active.replay.Header?.Players ?? [])
       .filter((p) => !p.Observer)
       .map((p) => ({ id: p.ID, name: cleanBwString(p.Name) }));
-    return { players, rosters };
-  }, [active, currentFrame]);
+    const slots = playerSlotMap(active.replay.Header?.Players, identities);
+    return { players, rosters, slots };
+  }, [active, currentFrame, identities]);
 
   if (!active) return null;
 
@@ -41,7 +50,7 @@ export function RosterPanel() {
                 <div className="mb-1 flex items-center gap-1 truncate">
                   <span
                     className="inline-block h-2 w-2 rounded-full"
-                    style={{ background: i === 0 ? 'var(--color-player-a)' : 'var(--color-player-b)' }}
+                    style={{ background: playerColorVar(slots.get(p.id) ?? i) }}
                   />
                   <span className="truncate text-[var(--color-text-h)]">{p.name}</span>
                 </div>

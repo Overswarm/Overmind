@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../state/store';
+import { useSettingsStore } from '../state/settings';
 import { FRAMES_PER_SECOND, formatMMSS, frameToSeconds } from '../types/replay';
 import { cachedSwings } from '../analysis/cache';
 import type { SwingMarker } from '../analysis/swings';
+import { playerSlotMap } from './playerColor';
 
 const KIND_COLOR: Record<SwingMarker['kind'], string> = {
   expansion: 'var(--color-accent)',
   tech: 'var(--color-swing-tech)',
   unit: 'var(--color-swing-unit)',
   scout: 'var(--color-swing-scout)',
+  firstContact: 'var(--color-swing-contact)',
 };
 
 const PLAYBACK_SPEEDS = [0.5, 1, 2, 4, 8] as const;
@@ -130,14 +133,17 @@ function SwingTrack({ total }: { total: number }) {
   const active = useAppStore((s) => s.active);
   const currentFrame = useAppStore((s) => s.currentFrame);
   const setFrame = useAppStore((s) => s.setFrame);
+  const identities = useSettingsStore((s) => s.identities);
 
   const markers = useMemo(() => {
     if (!active) return [];
     return cachedSwings(active.hash, active.replay);
   }, [active]);
 
-  const players = (active?.replay.Header?.Players ?? []).filter((p) => !p.Observer);
-  const pidIndex = new Map(players.map((p, i) => [p.ID, i]));
+  const slots = useMemo(
+    () => playerSlotMap(active?.replay.Header?.Players, identities),
+    [active, identities],
+  );
 
   return (
     <div className="relative flex-1">
@@ -153,20 +159,25 @@ function SwingTrack({ total }: { total: number }) {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-full">
         {markers.map((m, i) => {
           const pct = total > 0 ? (m.frame / total) * 100 : 0;
-          const idx = pidIndex.get(m.playerID) ?? 0;
-          const side = idx === 0 ? 'top' : 'bottom';
+          // 4-player games: stick the extra slots to the bottom; slot 0 stays
+          // on top so "me" is consistent across replays.
+          const slot = slots.get(m.playerID) ?? 0;
+          const side = slot === 0 ? 'top' : 'bottom';
+          // First-contact is a shared event — render it spanning the full
+          // marker area so it reads as distinct from single-player ticks.
+          const isShared = m.kind === 'firstContact';
           return (
             <button
               key={i}
               type="button"
               onClick={() => setFrame(m.frame)}
               title={`${formatMMSS(m.seconds)} · ${m.label}`}
-              className="pointer-events-auto absolute h-2 w-[2px] -translate-x-1/2"
+              className={`pointer-events-auto absolute ${isShared ? 'h-full top-0' : 'h-2'} w-[2px] -translate-x-1/2`}
               style={{
                 left: `${pct}%`,
-                [side]: '0',
+                ...(isShared ? {} : { [side]: '0' }),
                 background: KIND_COLOR[m.kind],
-                opacity: 0.85,
+                opacity: isShared ? 0.9 : 0.85,
               }}
             />
           );
@@ -178,8 +189,9 @@ function SwingTrack({ total }: { total: number }) {
           <span className="ml-3 mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.tech }} /> tech
           <span className="ml-3 mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.unit }} /> 1st unit
           <span className="ml-3 mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.scout }} /> scout
+          <span className="ml-3 mr-1 inline-block h-1.5 w-1.5 align-middle" style={{ background: KIND_COLOR.firstContact }} /> 1st contact
         </span>
-        <span>top = P1 · bottom = P2</span>
+        <span>top = slot 0 · bottom = slot 1</span>
       </div>
     </div>
   );

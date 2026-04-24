@@ -3,11 +3,23 @@ import type { AlignedData, Options } from 'uplot';
 import type uPlot from 'uplot';
 import { useAppStore } from '../../state/store';
 import { useSettingsStore } from '../../state/settings';
-import { cachedTimeSeries } from '../../analysis/cache';
+import { cachedBuildOrder, cachedTimeSeries } from '../../analysis/cache';
 import { cleanBwString, FRAMES_PER_SECOND, formatMMSS } from '../../types/replay';
 import { UPlotChart } from '../UPlotChart';
+import {
+  PLAYER_SLOT_FALLBACKS,
+  PLAYER_SLOT_VARS,
+  playerSlotMap,
+} from '../playerColor';
 
 type Metric = 'workersProduced' | 'supplyProduced' | 'supplyCap' | 'armyValue' | 'spent' | 'apm' | 'eapm';
+
+interface UpgradeTick {
+  seconds: number;
+  name: string;
+  playerID: number;
+  kind: 'tech' | 'upgrade';
+}
 
 const METRIC_LABELS: Record<Metric, string> = {
   workersProduced: 'Workers produced',
@@ -19,20 +31,17 @@ const METRIC_LABELS: Record<Metric, string> = {
   eapm: 'EAPM (rolling 30s)',
 };
 
-// Player strokes resolved from the active theme at render-time. uPlot draws
-// on a canvas, so it needs literal color strings — `var(...)` won't resolve.
-const PLAYER_STROKE_VARS = [
-  '--color-player-a',
-  '--color-player-b',
-  '--color-player-c',
-  '--color-player-d',
-] as const;
-const PLAYER_STROKE_FALLBACKS = ['#38bdf8', '#f97316', '#a855f7', '#f472b6'];
-
 function cssVar(name: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
+}
+
+function slotColor(slot: number): string {
+  return cssVar(
+    PLAYER_SLOT_VARS[slot % PLAYER_SLOT_VARS.length],
+    PLAYER_SLOT_FALLBACKS[slot % PLAYER_SLOT_FALLBACKS.length],
+  );
 }
 
 export function DualTrackPanel() {
@@ -44,6 +53,7 @@ export function DualTrackPanel() {
   const [metric, setMetric] = useState<Metric>('supplyProduced');
   // Subscribing to theme forces the memo below to recompute colors on change.
   const theme = useSettingsStore((s) => s.theme);
+  const identities = useSettingsStore((s) => s.identities);
 
   // uPlot instance + current playhead (in seconds). The draw hook reads from
   // `playheadRef` every paint, and we call `redraw` whenever currentFrame
@@ -56,6 +66,30 @@ export function DualTrackPanel() {
     if (!active) return null;
     return cachedTimeSeries(active.hash, active.replay, 1);
   }, [active]);
+
+  // Player slot map — identity-based pinning, falls through to replay order.
+  const slots = useMemo(
+    () => playerSlotMap(active?.replay.Header?.Players, identities),
+    [active, identities],
+  );
+
+  // Tech and upgrade events to paint along the top of the chart. Kept in a
+  // ref so the draw hook can read the latest list without rebuilding uPlot.
+  const upgradeTicks = useMemo<UpgradeTick[]>(() => {
+    if (!active) return [];
+    return cachedBuildOrder(active.hash, active.replay)
+      .filter((e) => e.kind === 'tech' || e.kind === 'upgrade')
+      .map((e) => ({
+        seconds: e.seconds,
+        name: e.name,
+        playerID: e.playerID,
+        kind: e.kind as 'tech' | 'upgrade',
+      }));
+  }, [active]);
+  const upgradeTicksRef = useRef<UpgradeTick[]>(upgradeTicks);
+  upgradeTicksRef.current = upgradeTicks;
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
 
   const { data, options, atCursor } = useMemo(() => {
     if (!series) return { data: null as AlignedData | null, options: null as Options | null, atCursor: [] as { name: string; value: number; color: string }[] };
@@ -99,17 +133,44 @@ export function DualTrackPanel() {
             if (typeof t === 'number') setHoverFrame(t * FRAMES_PER_SECOND);
           },
         ],
-        // Paint the playhead last so it draws on top of the series. Reads
-        // from playheadRef every frame so updates don't require rebuilding
-        // options (UPlotChart only consumes them at mount).
+        // Paint the playhead + tech/upgrade overlay last so they draw on top
+        // of the series. Read from refs every frame so updates don't require
+        // rebuilding options (UPlotChart only consumes them at mount).
         draw: [
           (u) => {
+            const ctx = u.ctx;
+            const top = u.bbox.top;
+            const height = u.bbox.height;
+
+            // Tech / upgrade ticks: tiny colored triangle at the top of the
+            // plot area, pointing down. Colored by the player's pinned slot.
+            // Canvas is sized at devicePixelRatio, so scale the marker size
+            // up accordingly — otherwise the triangles look tiny on retina.
+            const ticks = upgradeTicksRef.current;
+            const slotMap = slotsRef.current;
+            if (ticks.length > 0) {
+              const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
+              const size = 5 * dpr;
+              for (const t of ticks) {
+                const slot = slotMap.get(t.playerID) ?? 0;
+                const tx = Math.round(u.valToPos(t.seconds, 'x', true));
+                ctx.save();
+                ctx.fillStyle = slotColor(slot);
+                ctx.globalAlpha = 0.9;
+                ctx.beginPath();
+                ctx.moveTo(tx - size, top);
+                ctx.lineTo(tx + size, top);
+                ctx.lineTo(tx, top + size * 1.6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+              }
+            }
+
+            // Playhead line.
             const seconds = playheadRef.current;
             if (!Number.isFinite(seconds)) return;
             const x = Math.round(u.valToPos(seconds, 'x', true)) + 0.5;
-            const top = u.bbox.top;
-            const height = u.bbox.height;
-            const ctx = u.ctx;
             ctx.save();
             ctx.strokeStyle = playheadStroke;
             ctx.lineWidth = 1.5;
@@ -137,7 +198,7 @@ export function DualTrackPanel() {
         { label: 'time' },
         ...series.players.map((p, i) => ({
           label: cleanBwString(p.name),
-          stroke: cssVar(PLAYER_STROKE_VARS[i % PLAYER_STROKE_VARS.length], PLAYER_STROKE_FALLBACKS[i % PLAYER_STROKE_FALLBACKS.length]),
+          stroke: slotColor(slots.get(p.playerID) ?? i),
           width: 1.5,
           points: { show: false },
         })),
@@ -153,12 +214,12 @@ export function DualTrackPanel() {
       value: metric === 'apm' || metric === 'eapm'
         ? Math.round(p[metric][idx] ?? 0)
         : p[metric][idx] ?? 0,
-      color: cssVar(PLAYER_STROKE_VARS[i % PLAYER_STROKE_VARS.length], PLAYER_STROKE_FALLBACKS[i % PLAYER_STROKE_FALLBACKS.length]),
+      color: slotColor(slots.get(p.playerID) ?? i),
     }));
     return { data, options, atCursor };
     // `theme` is intentionally a dep so colors refresh when the user cycles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series, metric, currentFrame, setFrame, setHoverFrame, theme]);
+  }, [series, metric, currentFrame, setFrame, setHoverFrame, theme, slots]);
 
   // Trigger a uPlot redraw each time the playhead moves so the draw hook
   // above re-paints. `redraw(false, false)` skips path/axis rebuild — it's
@@ -209,7 +270,10 @@ export function DualTrackPanel() {
         <div className="min-h-0 flex-1">
           {data && options && (
             <UPlotChart
-              key={theme}
+              // Rebuild the plot when theme, replay, or slot mapping change.
+              // Stroke colors are set at construction and setData doesn't
+              // update them — remounting is the clean fix.
+              key={`${theme}::${active.hash}::${Array.from(slots.entries()).map(([k, v]) => `${k}:${v}`).join('|')}`}
               data={data}
               options={options}
               className="h-full w-full"

@@ -1,15 +1,22 @@
 import { useMemo } from 'react';
 import { useAppStore } from '../../state/store';
+import { useSettingsStore } from '../../state/settings';
 import { cachedHotkeyStats } from '../../analysis/cache';
 import { hotkeyReliance } from '../../analysis/hotkeys';
 import { cleanBwString } from '../../types/replay';
+import { playerColorVar, playerSlotMap } from '../playerColor';
 
 export function HotkeyPanel() {
   const active = useAppStore((s) => s.active);
+  const identities = useSettingsStore((s) => s.identities);
   const stats = useMemo(() => {
     if (!active) return null;
     return cachedHotkeyStats(active.hash, active.replay);
   }, [active]);
+  const slots = useMemo(
+    () => playerSlotMap(active?.replay.Header?.Players, identities),
+    [active, identities],
+  );
 
   if (!active || !stats) return null;
 
@@ -29,7 +36,7 @@ export function HotkeyPanel() {
               <div className="flex items-center gap-2">
                 <span
                   className="inline-block h-2 w-2 rounded-full"
-                  style={{ background: i === 0 ? 'var(--color-player-a)' : 'var(--color-player-b)' }}
+                  style={{ background: playerColorVar(slots.get(p.playerID) ?? i) }}
                 />
                 <span className="font-semibold text-[var(--color-text-h)]">
                   {playerNames[p.playerID] ?? `P${p.playerID}`}

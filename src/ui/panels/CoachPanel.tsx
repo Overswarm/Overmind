@@ -3,18 +3,25 @@ import { useAppStore } from '../../state/store';
 import { useSettingsStore } from '../../state/settings';
 import { cachedCoaching, cachedDigest } from '../../analysis/cache';
 import type { Callout, CalloutSeverity } from '../../analysis/coaching';
+import { playerColorVar, playerSlotMap } from '../playerColor';
 
 export function CoachPanel() {
   const active = useAppStore((s) => s.active);
   const setFrame = useAppStore((s) => s.setFrame);
   const identities = useSettingsStore((s) => s.identities);
 
-  const { coaching, meIDs } = useMemo(() => {
-    if (!active) return { coaching: null, meIDs: new Set<number>() };
+  const { coaching, meIDs, slots } = useMemo(() => {
+    if (!active)
+      return {
+        coaching: null,
+        meIDs: new Set<number>(),
+        slots: new Map<number, number>(),
+      };
     const digest = cachedDigest(active.hash, active.replay, active.name, identities);
     const c = cachedCoaching(active.hash, active.replay, active.name, identities);
     const me = new Set(digest.players.filter((p) => p.isMe).map((p) => p.playerID));
-    return { coaching: c, meIDs: me };
+    const slots = playerSlotMap(active.replay.Header?.Players, identities);
+    return { coaching: c, meIDs: me, slots };
   }, [active, identities]);
 
   if (!active || !coaching) return null;
@@ -44,7 +51,7 @@ export function CoachPanel() {
               <div className="flex items-center gap-2">
                 <span
                   className="inline-block h-2 w-2 rounded-full"
-                  style={{ background: i === 0 ? 'var(--color-player-a)' : 'var(--color-player-b)' }}
+                  style={{ background: playerColorVar(slots.get(pc.playerID) ?? i) }}
                 />
                 <span className="truncate font-semibold text-[var(--color-text-h)]">
                   {pc.name}

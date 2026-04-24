@@ -9,13 +9,14 @@
 import type { ParsedReplay } from '../types/replay';
 import type { BuildOrderEvent } from './buildOrder';
 import { computeScouts } from './scouting';
+import { computeFirstContact } from './firstContact';
 
 export interface SwingMarker {
   frame: number;
   seconds: number;
   playerID: number;
   label: string;
-  kind: 'expansion' | 'tech' | 'unit' | 'scout';
+  kind: 'expansion' | 'tech' | 'unit' | 'scout' | 'firstContact';
 }
 
 // First-of-kind tech buildings worth marking. Keyed by unit name from units.ts.
@@ -56,6 +57,16 @@ export function computeSwingMarkers(events: BuildOrderEvent[], replay?: ParsedRe
         playerID: s.playerID,
         label: s.label,
         kind: 'scout',
+      });
+    }
+    const contact = computeFirstContact(replay);
+    if (contact) {
+      out.push({
+        frame: contact.frame,
+        seconds: contact.seconds,
+        playerID: contact.aggressorID,
+        label: '1st contact',
+        kind: 'firstContact',
       });
     }
   }

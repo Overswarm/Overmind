@@ -12,7 +12,15 @@ import { computeBuildOrder } from './buildOrder';
 import { computeSupplyBlocks } from './supplyBlocks';
 import { computeProductionIdle } from './productionIdle';
 import { computeTimings, averageTiming, type PlayerTimings } from './timings';
+import { computeSpawnInfo, type SpawnPairing, type SpawnQuadrant, type SpawnSimple } from './spawns';
+import { computeProductionSequence, type ProductionStep } from './productionSequence';
 import { unitMeta } from './units';
+
+// A player is considered to have been "cheesed" (or at minimum to have lost
+// a very short game) when the game ends with a decided outcome and they
+// leave / the replay ends before this threshold. Used both for digest flags
+// and for rollup tables in the Claude export.
+export const SHORT_LOSS_SECONDS = 5 * 60;
 
 export interface ReplayDigest {
   hash: string;
@@ -23,6 +31,10 @@ export interface ReplayDigest {
   durationSeconds: number;
   winnerTeam?: number;
   notes?: string;
+  // Spawn pair classification — see src/analysis/spawns.ts. Set to 'unknown'
+  // when the replay doesn't have usable start-location data (rare).
+  spawnPairing: SpawnPairing;
+  spawnSimple: SpawnSimple;
   players: PlayerDigest[];
 }
 
@@ -46,6 +58,19 @@ export interface PlayerDigest {
   unitsProduced: Record<string, number>;
   // Buildings constructed, similarly aggregated.
   buildingsProduced: Record<string, number>;
+  // Frame / seconds the player left the game, from Computed.LeaveGameCmds.
+  // Null when the player either never left or is the replay saver (whose
+  // leave is not recorded). Lets the Claude export flag "died at X:XX".
+  leaveSeconds: number | null;
+  // Spawn quadrant for this player, if classifiable.
+  spawnQuadrant?: SpawnQuadrant;
+  // Strategic-infrastructure sequence — production buildings, gas, and
+  // tech structures in build order. See productionSequence.ts.
+  productionSequence: ProductionStep[];
+  // True when this player lost the game and it ended before SHORT_LOSS_SECONDS.
+  // Proxy for "got cheesed / got rushed". Doesn't fire on draws / disconnects
+  // where `won` is null.
+  shortLoss: boolean;
 }
 
 export interface Aggregate {
@@ -120,6 +145,15 @@ export function digestReplay(
   const pids = nonObs.map((p) => p.ID);
   const supplyBlocks = computeSupplyBlocks(events, pids, h?.Frames ?? 0);
   const production = computeProductionIdle(events, pids, h?.Frames ?? 0);
+  const spawn = computeSpawnInfo(replay);
+  const leaveByPID = new Map<number, number>();
+  for (const l of c?.LeaveGameCmds ?? []) {
+    // If a player has multiple leave events (shouldn't happen, but be safe),
+    // use the earliest — that's the one that actually ended their presence.
+    const sec = l.Frame / fps;
+    const prev = leaveByPID.get(l.PlayerID);
+    if (prev == null || sec < prev) leaveByPID.set(l.PlayerID, sec);
+  }
 
   const players: PlayerDigest[] = nonObs.map((p) => {
     const desc = c?.PlayerDescs?.find((d) => d.PlayerID === p.ID);
@@ -149,6 +183,10 @@ export function digestReplay(
 
     const timings = computeTimings(events, p.ID);
 
+    const leaveSeconds = leaveByPID.get(p.ID) ?? null;
+    const shortLoss =
+      won === false && durationSeconds < SHORT_LOSS_SECONDS;
+
     return {
       playerID: p.ID,
       name: cleanedName,
@@ -166,6 +204,10 @@ export function digestReplay(
       timings,
       unitsProduced,
       buildingsProduced,
+      leaveSeconds,
+      spawnQuadrant: spawn.byPlayer.get(p.ID),
+      productionSequence: computeProductionSequence(events, p.ID),
+      shortLoss,
     };
   });
 
@@ -178,6 +220,8 @@ export function digestReplay(
     durationSeconds,
     winnerTeam: c?.WinnerTeam,
     notes: entry.notes,
+    spawnPairing: spawn.pairing,
+    spawnSimple: spawn.simple,
     players,
   };
 }
@@ -370,4 +414,160 @@ function deriveMatchup(players: Array<{ Team: number; Race?: { Letter?: number; 
     prevTeam = p.Team;
   });
   return parts.join('');
+}
+
+// Library rollups, me-scoped. For each distinct group key (currently
+// matchup × map × spawn) return games / wins / losses / avgDuration / short-
+// loss-count so the Claude export can include the tables the user asked for
+// ("Polypoid TvZ cross spawn: 12 games, 3W 9L, avg 8:12, 4 short losses").
+// We deliberately do not filter out "unknown" outcomes — they show up in the
+// `unknown` column so the totals stay honest.
+export interface MeRollupRow {
+  matchup: string;            // opponent-side normalized matchup ("TvZ" = me T)
+  meRace: string;
+  oppRace: string;
+  map: string;
+  spawnSimple: SpawnSimple;
+  games: number;
+  wins: number;
+  losses: number;
+  unknown: number;
+  avgDurationSeconds: number;
+  avgMyApm: number;
+  avgOppApm: number;
+  avgSupplyBlockSeconds: number;
+  // Games where "me" lost before SHORT_LOSS_SECONDS. Highlights maps where
+  // the user is consistently getting rushed / cheesed.
+  shortLosses: number;
+}
+
+export function computeMeRollups(digests: ReplayDigest[]): MeRollupRow[] {
+  const buckets = new Map<string, {
+    row: MeRollupRow;
+    durationSum: number;
+    myApmSum: number;
+    oppApmSum: number;
+    oppApmN: number;
+    sbSum: number;
+    sbN: number;
+  }>();
+
+  for (const d of digests) {
+    const mePlayers = d.players.filter((p) => p.isMe);
+    if (mePlayers.length === 0) continue;
+    const meRep = mePlayers[0];
+    const oppPlayers = d.players.filter((p) => p.team !== meRep.team);
+    if (oppPlayers.length === 0) continue;
+    const oppRep = oppPlayers[0];
+
+    const matchup = `${meRep.race}v${oppRep.race}`;
+    const map = d.mapName ?? 'Unknown';
+    const key = `${matchup}::${map}::${d.spawnSimple}`;
+    let b = buckets.get(key);
+    if (!b) {
+      b = {
+        row: {
+          matchup,
+          meRace: meRep.race,
+          oppRace: oppRep.race,
+          map,
+          spawnSimple: d.spawnSimple,
+          games: 0,
+          wins: 0,
+          losses: 0,
+          unknown: 0,
+          avgDurationSeconds: 0,
+          avgMyApm: 0,
+          avgOppApm: 0,
+          avgSupplyBlockSeconds: 0,
+          shortLosses: 0,
+        },
+        durationSum: 0,
+        myApmSum: 0,
+        oppApmSum: 0,
+        oppApmN: 0,
+        sbSum: 0,
+        sbN: 0,
+      };
+      buckets.set(key, b);
+    }
+    b.row.games += 1;
+    if (meRep.won === true) b.row.wins += 1;
+    else if (meRep.won === false) b.row.losses += 1;
+    else b.row.unknown += 1;
+    if (meRep.shortLoss) b.row.shortLosses += 1;
+    b.durationSum += d.durationSeconds;
+    b.myApmSum += meRep.apm;
+    for (const op of oppPlayers) {
+      b.oppApmSum += op.apm;
+      b.oppApmN += 1;
+    }
+    b.sbSum += meRep.supplyBlockSeconds;
+    b.sbN += 1;
+  }
+
+  const rows: MeRollupRow[] = [];
+  for (const b of buckets.values()) {
+    b.row.avgDurationSeconds = b.row.games > 0 ? b.durationSum / b.row.games : 0;
+    b.row.avgMyApm = b.row.games > 0 ? b.myApmSum / b.row.games : 0;
+    b.row.avgOppApm = b.oppApmN > 0 ? b.oppApmSum / b.oppApmN : 0;
+    b.row.avgSupplyBlockSeconds = b.sbN > 0 ? b.sbSum / b.sbN : 0;
+    rows.push(b.row);
+  }
+  // Sort by games desc so the most-played buckets are at the top.
+  rows.sort((a, b) => b.games - a.games || a.map.localeCompare(b.map));
+  return rows;
+}
+
+// Flatter variants for when you want only one dimension. Implemented as
+// filters on the full-key rollup so the aggregation logic lives in one place.
+export function rollupByMatchupMap(rows: MeRollupRow[]): MeRollupRow[] {
+  const acc = new Map<string, MeRollupRow>();
+  for (const r of rows) {
+    const key = `${r.matchup}::${r.map}`;
+    const existing = acc.get(key);
+    if (!existing) {
+      acc.set(key, { ...r, spawnSimple: 'unknown' });
+      continue;
+    }
+    mergeRows(existing, r);
+  }
+  const out = [...acc.values()];
+  out.sort((a, b) => b.games - a.games || a.map.localeCompare(b.map));
+  return out;
+}
+
+export function rollupByMatchup(rows: MeRollupRow[]): MeRollupRow[] {
+  const acc = new Map<string, MeRollupRow>();
+  for (const r of rows) {
+    const key = r.matchup;
+    const existing = acc.get(key);
+    if (!existing) {
+      acc.set(key, { ...r, map: '(all)', spawnSimple: 'unknown' });
+      continue;
+    }
+    mergeRows(existing, r);
+  }
+  const out = [...acc.values()];
+  out.sort((a, b) => b.games - a.games || a.matchup.localeCompare(b.matchup));
+  return out;
+}
+
+// In-place merge that preserves the grouping keys on `dst`. Averages are
+// recomputed off the original totals; we reconstruct the sums via games ×
+// avg and re-divide.
+function mergeRows(dst: MeRollupRow, src: MeRollupRow): void {
+  const totalGames = dst.games + src.games;
+  if (totalGames === 0) return;
+  dst.avgDurationSeconds =
+    (dst.avgDurationSeconds * dst.games + src.avgDurationSeconds * src.games) / totalGames;
+  dst.avgMyApm = (dst.avgMyApm * dst.games + src.avgMyApm * src.games) / totalGames;
+  dst.avgOppApm = (dst.avgOppApm * dst.games + src.avgOppApm * src.games) / totalGames;
+  dst.avgSupplyBlockSeconds =
+    (dst.avgSupplyBlockSeconds * dst.games + src.avgSupplyBlockSeconds * src.games) / totalGames;
+  dst.games = totalGames;
+  dst.wins += src.wins;
+  dst.losses += src.losses;
+  dst.unknown += src.unknown;
+  dst.shortLosses += src.shortLosses;
 }

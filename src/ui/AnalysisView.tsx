@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { db, getCachedReplay, listLibrary, type LibraryEntry } from '../storage/db';
 import { formatMMSS } from '../types/replay';
-import { aggregateDigests, digestReplay, type ReplayDigest } from '../analysis/aggregate';
+import {
+  aggregateDigests,
+  computeMeRollups,
+  digestReplay,
+  type ReplayDigest,
+} from '../analysis/aggregate';
+import { cachedCoaching } from '../analysis/cache';
+import type { PlayerCoaching } from '../analysis/coaching';
 import { renderLibraryExport } from '../analysis/llmExport';
 import { useSettingsStore } from '../state/settings';
 import { MapDetail } from './MapDetail';
@@ -26,6 +33,10 @@ export function AnalysisView() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [comparing, setComparing] = useState(false);
   const [mapDetail, setMapDetail] = useState<string | null>(null);
+  const [anonymize, setAnonymize] = useState(false);
+  // Cache of coaching per replay, lazily populated on first export so the
+  // warnings block can be included.
+  const coachingByHash = useMemo(() => new Map<string, PlayerCoaching[]>(), []);
 
   const identities = useSettingsStore((s) => s.identities);
   const addIdentity = useSettingsStore((s) => s.addIdentity);
@@ -89,12 +100,41 @@ export function AnalysisView() {
     return [...m].sort();
   }, [digests]);
 
-  const exportLLM = () => {
-    const text = renderLibraryExport(filtered, agg);
+  const exportLLM = async () => {
+    // Warm the coaching cache for every filtered replay. cachedCoaching
+    // memoizes per-hash, so re-exports are cheap. Missing parses are
+    // skipped silently.
+    for (const d of filtered) {
+      if (coachingByHash.has(d.hash)) continue;
+      try {
+        const parsed = await getCachedReplay(d.hash);
+        if (!parsed) continue;
+        coachingByHash.set(
+          d.hash,
+          cachedCoaching(d.hash, parsed, d.name, identities),
+        );
+      } catch (err) {
+        console.warn('[export] coaching failed', d.hash, err);
+      }
+    }
+    const rollups = computeMeRollups(filtered);
+    const text = renderLibraryExport(
+      {
+        digests: filtered,
+        aggregate: agg,
+        rollups,
+        coachingByHash,
+      },
+      { anonymize },
+    );
     download('overmind-library.md', text, 'text/markdown');
   };
   const exportJson = () => {
-    const data = { aggregate: agg, replays: filtered };
+    const data = {
+      aggregate: agg,
+      rollups: computeMeRollups(filtered),
+      replays: filtered,
+    };
     download('overmind-library.json', JSON.stringify(data, null, 2), 'application/json');
   };
   const reparseMissing = async () => {
@@ -162,17 +202,30 @@ export function AnalysisView() {
         <div className="text-xs text-[var(--color-muted)]">
           {loading ? 'Loading…' : `${filtered.length} of ${digests.length} replays · ${missing.length} missing parse`}
         </div>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          <label
+            className="flex items-center gap-1 text-[11px] text-[var(--color-muted)]"
+            title="Replace player names with me / opp-1 / opp-2 so the export is safe to share"
+          >
+            <input
+              type="checkbox"
+              checked={anonymize}
+              onChange={(e) => setAnonymize(e.target.checked)}
+              className="accent-[var(--color-accent)]"
+            />
+            Anonymize
+          </label>
           <button
             onClick={exportLLM}
             className="rounded bg-[var(--color-accent)] px-3 py-1 text-xs font-medium text-white hover:opacity-90"
-            title="Download an LLM-friendly markdown summary of the filtered replays"
+            title="Download a markdown file shaped for Claude coaching review"
           >
-            Export LLM markdown
+            Export for Claude
           </button>
           <button
             onClick={exportJson}
             className="rounded border border-[var(--color-border)] px-3 py-1 text-xs hover:text-[var(--color-text-h)]"
+            title="Raw JSON of aggregates + rollups + per-replay digests"
           >
             Export JSON
           </button>

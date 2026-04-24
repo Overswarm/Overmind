@@ -24,6 +24,26 @@ import { useSettingsStore, THEMES, type Theme } from './state/settings';
 type RightPanel = 'heatmap' | 'hotkeys' | 'macro' | 'coach' | 'notes' | 'debug' | null;
 type View = 'replay' | 'analysis' | 'stats' | 'achievements';
 
+// Long-form descriptions surfaced as custom hover tooltips below each header
+// pill. Keys match the lowercase label the button shows; the panel above uses
+// very short labels to stay compact, so the tooltip is where the "what does
+// this do" explanation lives.
+const RIGHT_PANEL_LABELS: Record<Exclude<RightPanel, null>, string> = {
+  heatmap: 'Where each player spent attention on the map',
+  hotkeys: 'Control-group usage and reliance',
+  macro: 'Supply blocks and production-idle time',
+  coach: 'Auto Coach warnings for macro mistakes',
+  notes: 'Your private notes for this replay',
+  debug: 'Raw screp output for this replay',
+};
+
+const VIEW_LABELS: Record<View, string> = {
+  replay: 'Per-replay analysis (press 1)',
+  analysis: 'Aggregate analysis across your library (press 2)',
+  stats: 'Fun factoids and career records (press 3)',
+  achievements: 'Library-wide achievements (press 4)',
+};
+
 function App() {
   const active = useAppStore((s) => s.active);
   const loading = useAppStore((s) => s.loading);
@@ -79,30 +99,13 @@ function App() {
         {active && view === 'replay' && (
           <div className="flex items-stretch">
             {(['heatmap', 'hotkeys', 'macro', 'coach', 'notes', 'debug'] as const).map((key) => (
-              <button
+              <HeaderTab
                 key={key}
+                label={key}
+                tooltip={RIGHT_PANEL_LABELS[key]}
+                active={rightPanel === key}
                 onClick={() => setRightPanel((cur) => (cur === key ? null : key))}
-                className={`border-l border-[var(--color-border)] px-3 text-[10px] uppercase tracking-wide ${
-                  rightPanel === key
-                    ? 'bg-[var(--color-accent)] text-white'
-                    : 'text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
-                }`}
-                title={
-                  key === 'heatmap'
-                    ? 'Toggle activity heatmap'
-                    : key === 'hotkeys'
-                      ? 'Toggle control-group analytics'
-                      : key === 'macro'
-                        ? 'Toggle supply-block & production-idle analysis'
-                        : key === 'coach'
-                          ? 'Toggle Auto Coach Warnings'
-                          : key === 'notes'
-                            ? 'Toggle per-replay notes'
-                            : 'Toggle raw screp output'
-                }
-              >
-                {key}
-              </button>
+              />
             ))}
           </div>
         )}
@@ -114,26 +117,14 @@ function App() {
         )}
         <div className="flex items-stretch">
           {(['replay', 'analysis', 'stats', 'achievements'] as const).map((v) => (
-            <button
+            <HeaderTab
               key={v}
+              label={v}
+              tooltip={VIEW_LABELS[v]}
+              active={view === v}
               onClick={() => setView(v)}
-              className={`border-l border-[var(--color-border)] px-3 text-[10px] font-semibold uppercase tracking-wide ${
-                view === v
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
-              }`}
-              title={
-                v === 'replay'
-                  ? 'Per-replay analysis (1)'
-                  : v === 'analysis'
-                    ? 'Aggregate analysis across your library (2)'
-                    : v === 'stats'
-                      ? 'Fun factoids and career records (3)'
-                      : 'Library-wide achievements (4)'
-              }
-            >
-              {v}
-            </button>
+              bold
+            />
           ))}
         </div>
         <div className="ml-3 flex items-center pr-3">
@@ -254,6 +245,46 @@ function App() {
           {loading.message || 'Working…'}
         </div>
       )}
+    </div>
+  );
+}
+
+// Header pill with a custom hover tooltip below. Replaces the browser's
+// native `title` attribute, which has a 1s+ delay and plain-text styling.
+// Uses Tailwind's group-hover so the bubble is CSS-only — no JS state.
+function HeaderTab({
+  label,
+  tooltip,
+  active,
+  onClick,
+  bold,
+}: {
+  label: string;
+  tooltip: string;
+  active: boolean;
+  onClick: () => void;
+  bold?: boolean;
+}) {
+  return (
+    <div className="group relative flex items-stretch">
+      <button
+        onClick={onClick}
+        className={`border-l border-[var(--color-border)] px-3 text-[10px] uppercase tracking-wide ${
+          bold ? 'font-semibold' : ''
+        } ${
+          active
+            ? 'bg-[var(--color-accent)] text-white'
+            : 'text-[var(--color-muted)] hover:text-[var(--color-text-h)]'
+        }`}
+      >
+        {label}
+      </button>
+      <div
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded border border-[var(--color-border)] bg-[var(--color-bg-panel)] px-2 py-1 text-[10px] font-normal normal-case tracking-normal text-[var(--color-text-h)] shadow-lg group-hover:block"
+      >
+        {tooltip}
+      </div>
     </div>
   );
 }

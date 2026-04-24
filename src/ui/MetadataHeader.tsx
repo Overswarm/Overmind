@@ -87,7 +87,11 @@ export function MetadataHeader() {
           )}
         </div>
       </div>
-      <div className="ml-auto flex items-center gap-3 text-xs text-[var(--color-muted)]">
+      {/* Player-name pills sit in their own block next to the map/outcome so
+          they stay anchored to the upper-left regardless of which view is
+          active. The border-l gives visual separation without coupling them
+          to the map block or to the right-side header buttons. */}
+      <div className="flex items-center gap-3 border-l border-[var(--color-border)] pl-4 text-xs text-[var(--color-muted)]">
         {(h.Players || [])
           .filter((p) => !p.Observer)
           .map((p, i) => (

@@ -8,9 +8,13 @@ interface Props {
   data: AlignedData;
   options: Omit<Options, 'width' | 'height'> & { width?: number; height?: number };
   className?: string;
+  // Called once the uPlot instance is constructed (and again with null on
+  // teardown). Callers use this to register imperative updates like a
+  // playhead overlay that needs to trigger redraws.
+  onInit?: (u: uPlot | null) => void;
 }
 
-export function UPlotChart({ data, options, className }: Props) {
+export function UPlotChart({ data, options, className, onInit }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
 
@@ -24,7 +28,9 @@ export function UPlotChart({ data, options, className }: Props) {
       height: options.height ?? Math.max(120, Math.floor(rect.height)),
     };
     plotRef.current = new uPlot(opts, data, hostRef.current);
+    onInit?.(plotRef.current);
     return () => {
+      onInit?.(null);
       plotRef.current?.destroy();
       plotRef.current = null;
     };

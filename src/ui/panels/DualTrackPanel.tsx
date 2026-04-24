@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AlignedData, Options } from 'uplot';
+import type uPlot from 'uplot';
 import { useAppStore } from '../../state/store';
 import { useSettingsStore } from '../../state/settings';
 import { cachedTimeSeries } from '../../analysis/cache';
@@ -44,6 +45,13 @@ export function DualTrackPanel() {
   // Subscribing to theme forces the memo below to recompute colors on change.
   const theme = useSettingsStore((s) => s.theme);
 
+  // uPlot instance + current playhead (in seconds). The draw hook reads from
+  // `playheadRef` every paint, and we call `redraw` whenever currentFrame
+  // changes so the overlay follows the main timeline during playback.
+  const uplotRef = useRef<uPlot | null>(null);
+  const playheadRef = useRef(0);
+  playheadRef.current = currentFrame / FRAMES_PER_SECOND;
+
   const series = useMemo(() => {
     if (!active) return null;
     return cachedTimeSeries(active.hash, active.replay, 1);
@@ -58,6 +66,7 @@ export function DualTrackPanel() {
     // plot area and was getting clipped by the next grid row.
     const axisStroke = cssVar('--color-chart-axis', '#6b7280');
     const gridStroke = cssVar('--color-chart-grid', 'rgba(107,114,128,0.18)');
+    const playheadStroke = cssVar('--color-accent', '#f97316');
     const options: Options = {
       width: 600,
       height: 260,
@@ -88,6 +97,27 @@ export function DualTrackPanel() {
             }
             const t = self.data[0]?.[idx];
             if (typeof t === 'number') setHoverFrame(t * FRAMES_PER_SECOND);
+          },
+        ],
+        // Paint the playhead last so it draws on top of the series. Reads
+        // from playheadRef every frame so updates don't require rebuilding
+        // options (UPlotChart only consumes them at mount).
+        draw: [
+          (u) => {
+            const seconds = playheadRef.current;
+            if (!Number.isFinite(seconds)) return;
+            const x = Math.round(u.valToPos(seconds, 'x', true)) + 0.5;
+            const top = u.bbox.top;
+            const height = u.bbox.height;
+            const ctx = u.ctx;
+            ctx.save();
+            ctx.strokeStyle = playheadStroke;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(x, top);
+            ctx.lineTo(x, top + height);
+            ctx.stroke();
+            ctx.restore();
           },
         ],
       },
@@ -129,6 +159,13 @@ export function DualTrackPanel() {
     // `theme` is intentionally a dep so colors refresh when the user cycles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, metric, currentFrame, setFrame, setHoverFrame, theme]);
+
+  // Trigger a uPlot redraw each time the playhead moves so the draw hook
+  // above re-paints. `redraw(false, false)` skips path/axis rebuild — it's
+  // cheap enough to run every tick during playback.
+  useEffect(() => {
+    uplotRef.current?.redraw(false, false);
+  }, [currentFrame]);
 
   if (!active) return null;
 
@@ -176,6 +213,9 @@ export function DualTrackPanel() {
               data={data}
               options={options}
               className="h-full w-full"
+              onInit={(u) => {
+                uplotRef.current = u;
+              }}
             />
           )}
         </div>

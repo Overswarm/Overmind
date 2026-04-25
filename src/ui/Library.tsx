@@ -3,7 +3,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import {
   listLibrary,
   getCachedReplay,
-  touchLibraryEntry,
   deleteLibraryEntry,
   setFavorite,
   type LibraryEntry,
@@ -35,7 +34,10 @@ export function Library() {
       setError('Cached replay missing. Re-import the file.');
       return;
     }
-    await touchLibraryEntry(hash);
+    // We deliberately don't touch lastOpenedAt here — the "Recent" sort is
+    // keyed off addedAt so the list stays stable when you click around. A
+    // re-sort on every click made it impossible to step through neighboring
+    // replays without losing your place.
     setActive({ hash, name, path, replay });
   };
 
@@ -71,8 +73,9 @@ export function Library() {
     }
     if (matchup) list = list.filter((e) => e.matchup === matchup);
     const sorted = [...list];
-    const byRecency = (a: LibraryEntry, b: LibraryEntry) =>
-      (b.lastOpenedAt ?? b.addedAt) - (a.lastOpenedAt ?? a.addedAt);
+    // "Recent" = recently *added* to the library, not recently opened.
+    // Re-opening a replay must not change its position; see onOpen above.
+    const byRecency = (a: LibraryEntry, b: LibraryEntry) => b.addedAt - a.addedAt;
     if (sort === 'recent') {
       // Pinned replays always surface at the top of Recent — it's the default
       // sort, so this makes the favorite feature visible without requiring a
